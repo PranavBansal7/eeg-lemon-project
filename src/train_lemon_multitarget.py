@@ -1,48 +1,54 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
-from typing import Dict, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import joblib
-import matplotlib.pyplot as plt
 import mne
 import numpy as np
 import pandas as pd
-import seaborn as sns
-from mne.io import BaseRaw
-from sklearn.base import clone
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.model_selection import KFold, cross_val_predict
+from sklearn.model_selection import KFold
 from sklearn.multioutput import MultiOutputRegressor
+
+
+if not hasattr(np, "trapz") and hasattr(np, "trapezoid"):
+    np.trapz = np.trapezoid  # type: ignore[attr-defined]
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
+EEG_DIR = DATA_DIR / "eeg" / "EEG_Preprocessed_BIDS_ID"
 
-# Easy-to-edit metadata settings
-PHENOTYPE_CSV_PATH = DATA_DIR / "phenotype.csv"
-PARTICIPANT_ID_COLUMN = "participant_id"
-AGE_COLUMN = "age"
-GENDER_COLUMN = "gender"
+METADATA_CSV = (
+    DATA_DIR
+    / "phenotype"
+    / "Behavioural_Data_MPILMBB_LEMON"
+    / "META_File_IDs_Age_Gender_Education_Drug_Smoke_SKID_LEMON.csv"
+)
 
-# Easy-to-edit target definitions
-TARGET_COLUMNS = [
-    "attention",
-    "fluid_intelligence",
-    "working_memory",
-    "executive_function",
-]
+COGNITIVE_DIR = (
+    DATA_DIR / "phenotype" / "Behavioural_Data_MPILMBB_LEMON" / "Cognitive_Test_Battery_LEMON"
+)
 
-# Output locations
+TARGET_FILES = {
+    "working_memory": COGNITIVE_DIR / "TAP_Working_Memory" / "TAP-Working Memory.csv",
+    "attention": COGNITIVE_DIR / "TAP_Alertness" / "TAP-Alertness.csv",
+    "executive_function": COGNITIVE_DIR / "TAP_Incompatibility" / "TAP-Incompatibility.csv",
+    "intelligence": COGNITIVE_DIR / "WST" / "WST.csv",
+}
+
+TARGET_COLUMNS = ["working_memory", "attention", "executive_function", "intelligence"]
+
 MODEL_PATH = PROJECT_ROOT / "models" / "rf_model.pkl"
-FEATURE_COLUMNS_PATH = PROJECT_ROOT / "processed" / "feature_columns.json"
 FEATURES_CSV_PATH = PROJECT_ROOT / "processed" / "features.csv"
-FEATURE_IMPORTANCE_PATH = PROJECT_ROOT / "processed" / "feature_importance.png"
+FEATURE_COLUMNS_PATH = PROJECT_ROOT / "processed" / "feature_columns.json"
 
 RANDOM_STATE = 42
-CV_SPLITS = 5
+CV_SPLITS = 3
 
 BANDS: Dict[str, Tuple[float, float]] = {
     "delta": (1.0, 4.0),
@@ -56,103 +62,177 @@ BANDS: Dict[str, Tuple[float, float]] = {
 }
 
 
-def sanitize_channel_name(channel_name: str) -> str:
-    cleaned = channel_name.strip().lower()
-    normalized = [char if char.isalnum() else "_" for char in cleaned]
-    return "".join(normalized).strip("_")
+def log(message: str) -> None:
+    print(f"[INFO] {message}")
 
 
-def _to_numeric(value: object) -> float:
-    numeric_value = pd.to_numeric(value, errors="coerce")
-    if pd.isna(numeric_value):
-        return float("nan")
-    return float(numeric_value)
+def warn(message: str) -> None:
+    print(f"[WARN] {message}")
 
 
-def _map_gender(value: object) -> float:
+def extract_subject_id_from_filename(file_path: Path) -> Optional[str]:
+    match = re.search(r"(sub-\d+)_EC\.set$", file_path.name)
+    if not match:
+        return None
+    return match.group(1)
+
+
+def parse_age_range(value: object) -> float:
     if pd.isna(value):
         return float("nan")
 
-    if isinstance(value, (int, float, np.integer, np.floating)):
-        as_float = float(value)
-        if as_float in (0.0, 1.0):
-            return as_float
-        if as_float == 2.0:
-            return 0.0
+    text = str(value).strip()
+    range_match = re.match(r"^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$", text)
+    if range_match:
+        low = float(range_match.group(1))
+        high = float(range_match.group(2))
+        return (low + high) / 2.0
+
+    as_num = pd.to_numeric(text, errors="coerce")
+    if pd.isna(as_num):
+        return float("nan")
+    return float(as_num)
+
+
+def map_gender(value: object) -> float:
+    if pd.isna(value):
         return float("nan")
 
-    normalized = str(value).strip().lower()
-    mapping = {
-        "m": 1.0,
-        "male": 1.0,
-        "man": 1.0,
-        "f": 0.0,
-        "female": 0.0,
-        "woman": 0.0,
-        "0": 0.0,
-        "1": 1.0,
-        "2": 0.0,
-    }
-    return mapping.get(normalized, float("nan"))
+    numeric = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric):
+        return float("nan")
+
+    if int(numeric) == 1:
+        return 0.0
+    if int(numeric) == 2:
+        return 1.0
+    return float("nan")
 
 
-def _build_model() -> MultiOutputRegressor:
-    base_model = RandomForestRegressor(
-        n_estimators=500,
-        random_state=RANDOM_STATE,
-        n_jobs=-1,
-        max_features="sqrt",
-    )
-    return MultiOutputRegressor(base_model)
+def sanitize_channel_name(channel_name: str) -> str:
+    cleaned = channel_name.strip().lower()
+    return "".join(ch if ch.isalnum() else "_" for ch in cleaned).strip("_")
 
 
-def _find_participant_file(participant_id: str, data_dir: Path = DATA_DIR) -> Optional[Path]:
-    pid = str(participant_id).strip().lower()
-    if not pid:
-        return None
+def load_metadata() -> pd.DataFrame:
+    if not METADATA_CSV.exists():
+        warn(f"Metadata CSV not found: {METADATA_CSV}")
+        return pd.DataFrame()
 
-    fif_files = sorted(data_dir.rglob("*.fif")) + sorted(data_dir.rglob("*.fif.gz"))
-    if not fif_files:
-        return None
+    try:
+        metadata = pd.read_csv(METADATA_CSV)
+    except Exception as exc:
+        warn(f"Failed to read metadata CSV: {exc}")
+        return pd.DataFrame()
 
-    for file_path in fif_files:
-        file_name = file_path.name.lower()
-        file_stem = file_path.stem.lower()
-        if pid == file_stem or pid in file_name:
-            return file_path
+    required_cols = ["ID", "Age", "Gender_ 1=female_2=male"]
+    missing = [c for c in required_cols if c not in metadata.columns]
+    if missing:
+        warn(f"Metadata missing required columns: {missing}")
+        return pd.DataFrame()
 
+    metadata = metadata[["ID", "Age", "Gender_ 1=female_2=male"]].copy()
+    metadata["ID"] = metadata["ID"].astype(str).str.strip()
+    metadata["age"] = metadata["Age"].map(parse_age_range)
+    metadata["gender"] = metadata["Gender_ 1=female_2=male"].map(map_gender)
+
+    metadata = metadata.dropna(subset=["ID", "age", "gender"]).copy()
+    metadata = metadata[["ID", "age", "gender"]]
+    metadata = metadata.drop_duplicates(subset=["ID"], keep="first")
+
+    log(f"Loaded metadata rows: {len(metadata)}")
+    return metadata
+
+
+def select_first_numeric_target(df: pd.DataFrame, dataset_name: str) -> Optional[pd.Series]:
+    for col in df.columns:
+        if col == "ID":
+            continue
+        numeric_col = pd.to_numeric(df[col], errors="coerce")
+        if numeric_col.notna().any():
+            return numeric_col
+
+    warn(f"No numeric target column found in {dataset_name}")
     return None
 
 
-def load_participant_file(participant_id: str, data_dir: Path = DATA_DIR) -> Optional[BaseRaw]:
-    file_path = _find_participant_file(participant_id=participant_id, data_dir=data_dir)
-    if file_path is None:
-        print(f"No .fif EEG file found for participant '{participant_id}'.")
-        return None
+def load_target_file(file_path: Path, target_name: str) -> pd.DataFrame:
+    if not file_path.exists():
+        warn(f"Target file not found for {target_name}: {file_path}")
+        return pd.DataFrame(columns=["ID", target_name])
 
     try:
-        return mne.io.read_raw_eeglab(file_path, preload=True, verbose="ERROR")
+        df = pd.read_csv(file_path)
     except Exception as exc:
-        print(f"Failed to load EEG file for participant '{participant_id}' from {file_path}: {exc}")
+        warn(f"Failed to read target file {file_path}: {exc}")
+        return pd.DataFrame(columns=["ID", target_name])
+
+    if "ID" not in df.columns:
+        warn(f"Target file missing ID column: {file_path}")
+        return pd.DataFrame(columns=["ID", target_name])
+
+    series = select_first_numeric_target(df, target_name)
+    if series is None:
+        return pd.DataFrame(columns=["ID", target_name])
+
+    out = pd.DataFrame({"ID": df["ID"].astype(str).str.strip(), target_name: series})
+    out = out.dropna(subset=["ID", target_name]).copy()
+    out = out.drop_duplicates(subset=["ID"], keep="first")
+    log(f"Loaded target '{target_name}' rows: {len(out)}")
+    return out
+
+
+def build_merged_targets_and_metadata() -> pd.DataFrame:
+    metadata = load_metadata()
+    if metadata.empty:
+        return pd.DataFrame()
+
+    merged = metadata.copy()
+    for target_name, target_path in TARGET_FILES.items():
+        target_df = load_target_file(target_path, target_name)
+        if target_df.empty:
+            warn(f"Target dataframe empty for {target_name}")
+            return pd.DataFrame()
+        merged = merged.merge(target_df, on="ID", how="inner")
+        log(f"Rows after merging {target_name}: {len(merged)}")
+
+    merged = merged.dropna(subset=["age", "gender", *TARGET_COLUMNS]).copy()
+    merged = merged.drop_duplicates(subset=["ID"], keep="first")
+    log(f"Final merged rows (metadata + all targets): {len(merged)}")
+    return merged
+
+
+def find_eeg_files() -> List[Path]:
+    if not EEG_DIR.exists():
+        warn(f"EEG directory not found: {EEG_DIR}")
+        return []
+
+    files = sorted(EEG_DIR.glob("*_EC.set"))
+    log(f"Found *_EC.set EEG files: {len(files)}")
+    return files
+
+
+def load_and_preprocess_eeg(file_path: Path) -> Optional[mne.io.BaseRaw]:
+    try:
+        raw = mne.io.read_raw_eeglab(file_path, preload=True, verbose="ERROR")
+    except Exception as exc:
+        warn(f"Failed to load EEG file {file_path.name}: {exc}")
         return None
 
-
-def preprocess_raw(raw: BaseRaw) -> Optional[BaseRaw]:
     try:
-        processed = raw.copy()
-        processed.pick_types(eeg=True, meg=False, eog=False, ecg=False, stim=False, exclude="bads")
-        if not processed.ch_names:
-            print("No EEG channels available after EEG-only channel selection.")
+        raw.pick_types(eeg=True, meg=False, eog=False, ecg=False, stim=False, exclude="bads")
+        if len(raw.ch_names) == 0:
+            warn(f"No EEG channels after picking EEG: {file_path.name}")
             return None
-
-        processed.set_eeg_reference(ref_channels="average", projection=False, verbose="ERROR")
-        return processed
+        raw.set_eeg_reference(ref_channels="average", projection=False, verbose="ERROR")
     except Exception as exc:
-        print(f"Preprocessing failed: {exc}")
+        warn(f"Failed EEG preprocessing for {file_path.name}: {exc}")
         return None
 
+    return raw
 
-def compute_bandpower_features(raw: BaseRaw) -> Dict[str, float]:
+
+def compute_bandpower_features(raw: mne.io.BaseRaw) -> Dict[str, float]:
     eeg_data = raw.get_data(picks="eeg")
     if eeg_data.size == 0:
         return {}
@@ -163,6 +243,7 @@ def compute_bandpower_features(raw: BaseRaw) -> Dict[str, float]:
         return {}
 
     n_fft = min(2048, n_times)
+
     psd, freqs = mne.time_frequency.psd_array_welch(
         eeg_data,
         sfreq=sfreq,
@@ -174,263 +255,176 @@ def compute_bandpower_features(raw: BaseRaw) -> Dict[str, float]:
     )
 
     features: Dict[str, float] = {}
-    for channel_index, channel_name in enumerate(raw.ch_names):
-        clean_channel = sanitize_channel_name(channel_name)
+    for ch_idx, ch_name in enumerate(raw.ch_names):
+        clean_ch = sanitize_channel_name(ch_name)
         for band_name, (fmin, fmax) in BANDS.items():
-            freq_mask = (freqs >= fmin) & (freqs <= fmax)
-            if np.count_nonzero(freq_mask) < 2:
-                band_power = 0.0
+            mask = (freqs >= fmin) & (freqs <= fmax)
+            if np.count_nonzero(mask) < 2:
+                power = 0.0
             else:
-                band_power = float(np.trapz(psd[channel_index, freq_mask], freqs[freq_mask]))
-            feature_key = f"{clean_channel}_{band_name}"
-            features[feature_key] = band_power
+                power = float(np.trapz(psd[ch_idx, mask], freqs[mask]))
+            features[f"{clean_ch}_{band_name}"] = power
 
     return features
 
 
-def load_metadata(phenotype_path: Path = PHENOTYPE_CSV_PATH) -> pd.DataFrame:
-    if not phenotype_path.exists():
-        print(f"Phenotype CSV not found at {phenotype_path}")
-        print("Place phenotype.csv in data/ and ensure it includes participant_id, age, gender, and targets.")
-        return pd.DataFrame()
-
-    try:
-        metadata = pd.read_csv(phenotype_path)
-    except Exception as exc:
-        print(f"Could not read phenotype CSV at {phenotype_path}: {exc}")
-        return pd.DataFrame()
-
-    required_columns = [PARTICIPANT_ID_COLUMN, AGE_COLUMN, GENDER_COLUMN, *TARGET_COLUMNS]
-    missing_columns = [column for column in required_columns if column not in metadata.columns]
-    if missing_columns:
-        print("Phenotype CSV is missing required columns:")
-        print(", ".join(missing_columns))
-        print("Edit constants near the top of this file if your CSV uses different column names.")
-        return pd.DataFrame()
-
-    metadata = metadata.copy()
-    metadata[PARTICIPANT_ID_COLUMN] = metadata[PARTICIPANT_ID_COLUMN].astype(str).str.strip()
-    metadata = metadata[metadata[PARTICIPANT_ID_COLUMN] != ""]
-
-    metadata[AGE_COLUMN] = metadata[AGE_COLUMN].map(_to_numeric)
-    metadata[GENDER_COLUMN] = metadata[GENDER_COLUMN].map(_map_gender)
-    for target in TARGET_COLUMNS:
-        metadata[target] = metadata[target].map(_to_numeric)
-
-    metadata = metadata.dropna(subset=[AGE_COLUMN, GENDER_COLUMN, *TARGET_COLUMNS])
-
-    if metadata.empty:
-        print("No valid metadata rows remain after numeric conversion and NaN filtering.")
-
-    return metadata
-
-
-def build_dataset(
-    data_dir: Path = DATA_DIR,
-    metadata: Optional[pd.DataFrame] = None,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    if not data_dir.exists():
-        print(f"Data directory not found: {data_dir}")
+def build_dataset(merged_table: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    eeg_files = find_eeg_files()
+    if not eeg_files:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-    fif_files = sorted(data_dir.rglob("*.fif")) + sorted(data_dir.rglob("*.fif.gz"))
-    if not fif_files:
-        print(f"No .fif files found under {data_dir}")
-        print("Add LEMON EEG .fif files into data/ (or subfolders) and rerun.")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    merged_map = merged_table.set_index("ID")
 
-    if metadata is None:
-        metadata = load_metadata(PHENOTYPE_CSV_PATH)
+    row_dicts: List[Dict[str, float]] = []
+    row_targets: List[Dict[str, float]] = []
+    participant_ids: List[str] = []
 
-    if metadata.empty:
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    for file_path in eeg_files:
+        subject_id = extract_subject_id_from_filename(file_path)
+        if subject_id is None:
+            warn(f"Could not parse subject ID from filename: {file_path.name}")
+            continue
 
-    feature_rows = []
-    target_rows = []
-    participant_ids = []
+        if subject_id not in merged_map.index:
+            warn(f"Skipping {subject_id}: metadata/targets missing")
+            continue
 
-    for _, row in metadata.iterrows():
-        participant_id = str(row[PARTICIPANT_ID_COLUMN]).strip()
-        raw = load_participant_file(participant_id, data_dir=data_dir)
+        raw = load_and_preprocess_eeg(file_path)
         if raw is None:
+            warn(f"Skipping {subject_id}: EEG load/preprocessing failed")
             continue
 
-        processed = preprocess_raw(raw)
-        if processed is None:
+        features = compute_bandpower_features(raw)
+        if not features:
+            warn(f"Skipping {subject_id}: feature extraction failed")
             continue
 
-        feature_dict = compute_bandpower_features(processed)
-        if not feature_dict:
-            continue
+        subject_row = merged_map.loc[subject_id]
+        features["age"] = float(subject_row["age"])
+        features["gender"] = float(subject_row["gender"])
 
-        feature_dict["age"] = float(row[AGE_COLUMN])
-        feature_dict["gender"] = float(row[GENDER_COLUMN])
+        targets = {
+            "working_memory": float(subject_row["working_memory"]),
+            "attention": float(subject_row["attention"]),
+            "executive_function": float(subject_row["executive_function"]),
+            "intelligence": float(subject_row["intelligence"]),
+        }
 
-        feature_rows.append(feature_dict)
-        target_rows.append({target: float(row[target]) for target in TARGET_COLUMNS})
-        participant_ids.append(participant_id)
+        row_dicts.append(features)
+        row_targets.append(targets)
+        participant_ids.append(subject_id)
+        log(f"Included subject: {subject_id}")
 
-    if not feature_rows:
-        print("No valid participant samples were created. Check participant IDs and EEG file names.")
+    if not row_dicts:
+        warn("No valid subject samples created")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-    X = pd.DataFrame(feature_rows)
-    y = pd.DataFrame(target_rows, columns=TARGET_COLUMNS)
+    X = pd.DataFrame(row_dicts)
+    y = pd.DataFrame(row_targets, columns=TARGET_COLUMNS)
 
-    band_columns = sorted(column for column in X.columns if column not in {"age", "gender"})
-    feature_columns = band_columns + ["age", "gender"]
-    X = X.reindex(columns=feature_columns).fillna(0.0)
+    band_cols = sorted([c for c in X.columns if c not in {"age", "gender"}])
+    feature_cols = band_cols + ["age", "gender"]
+    X = X.reindex(columns=feature_cols).fillna(0.0)
 
-    extracted_features = pd.concat(
+    combined = pd.concat(
         [
-            pd.Series(participant_ids, name=PARTICIPANT_ID_COLUMN),
+            pd.Series(participant_ids, name="ID"),
             X.reset_index(drop=True),
             y.reset_index(drop=True),
         ],
         axis=1,
     )
 
-    return X, y, extracted_features
+    log(f"Final dataset shapes: X={X.shape}, y={y.shape}")
+    return X, y, combined
 
 
-def train_model(X: pd.DataFrame, y: pd.DataFrame) -> MultiOutputRegressor:
-    model = _build_model()
-    model.fit(X, y)
-    return model
+def build_model() -> MultiOutputRegressor:
+    base = RandomForestRegressor(
+        n_estimators=500,
+        random_state=RANDOM_STATE,
+        n_jobs=-1,
+        max_features="sqrt",
+    )
+    return MultiOutputRegressor(base)
 
 
-def evaluate_model(model: MultiOutputRegressor, X: pd.DataFrame, y: pd.DataFrame) -> pd.DataFrame:
-    if X.empty or y.empty:
-        print("Dataset is empty. Evaluation skipped.")
-        return pd.DataFrame(columns=["target", "r2", "rmse"])
-
-    n_splits = min(CV_SPLITS, len(X))
-    if n_splits < 2:
-        print("Not enough samples for cross-validation. Need at least 2 samples.")
-        return pd.DataFrame(columns=["target", "r2", "rmse"])
-
-    cv = KFold(n_splits=n_splits, shuffle=True, random_state=RANDOM_STATE)
-    y_pred = cross_val_predict(clone(model), X, y, cv=cv, n_jobs=-1)
-
-    if y_pred.ndim == 1:
-        y_pred = y_pred.reshape(-1, 1)
-
-    metrics_rows = []
-    for target_index, target_name in enumerate(TARGET_COLUMNS):
-        target_true = y.iloc[:, target_index].to_numpy()
-        target_pred = y_pred[:, target_index]
-
-        target_r2 = r2_score(target_true, target_pred)
-        target_rmse = float(np.sqrt(mean_squared_error(target_true, target_pred)))
-
-        metrics_rows.append(
-            {
-                "target": target_name,
-                "r2": target_r2,
-                "rmse": target_rmse,
-            }
-        )
-
-    metrics_df = pd.DataFrame(metrics_rows, columns=["target", "r2", "rmse"])
-    print("\nCross-validation metrics:")
-    print(metrics_df.to_string(index=False, float_format=lambda value: f"{value:.4f}"))
-    return metrics_df
-
-
-def plot_feature_importance(
-    model: MultiOutputRegressor,
-    feature_columns: Sequence[str],
-    output_path: Path = FEATURE_IMPORTANCE_PATH,
-    top_n: int = 30,
-) -> None:
-    if not hasattr(model, "estimators_") or not model.estimators_:
-        print("Feature importance plot skipped because model is not fitted.")
+def evaluate_model(model: MultiOutputRegressor, X: pd.DataFrame, y: pd.DataFrame) -> None:
+    n_samples = len(X)
+    if n_samples < 2:
+        warn("Not enough samples for evaluation")
         return
 
-    importance_list = []
-    for estimator in model.estimators_:
-        if hasattr(estimator, "feature_importances_"):
-            importance_list.append(estimator.feature_importances_)
-
-    if not importance_list:
-        print("Feature importance plot skipped because importances are unavailable.")
+    if n_samples < CV_SPLITS:
+        warn(f"Not enough samples for KFold n_splits={CV_SPLITS}; skipping CV")
         return
 
-    mean_importance = np.mean(np.vstack(importance_list), axis=0)
-    importance_df = pd.DataFrame(
-        {
-            "feature": list(feature_columns),
-            "importance": mean_importance,
-        }
-    ).sort_values("importance", ascending=False)
+    kf = KFold(n_splits=CV_SPLITS, shuffle=True, random_state=RANDOM_STATE)
 
-    top_n = min(top_n, len(importance_df))
-    if top_n <= 0:
-        return
+    y_true_all: List[np.ndarray] = []
+    y_pred_all: List[np.ndarray] = []
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    for fold_idx, (train_idx, test_idx) in enumerate(kf.split(X), start=1):
+        X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+        y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
 
-    sns.set_theme(style="whitegrid")
-    plt.figure(figsize=(12, max(6, int(top_n * 0.35))))
-    sns.barplot(data=importance_df.head(top_n), x="importance", y="feature", hue="feature", palette="crest", dodge=False)
-    plt.title("Top Feature Importances (Mean Across Targets)")
-    plt.xlabel("Importance")
-    plt.ylabel("Feature")
-    plt.legend([], [], frameon=False)
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=200)
-    plt.close()
+        fold_model = build_model()
+        fold_model.fit(X_train, y_train)
+        y_pred = fold_model.predict(X_test)
+
+        y_true_all.append(y_test.to_numpy())
+        y_pred_all.append(np.asarray(y_pred))
+
+        log(f"Completed fold {fold_idx}/{CV_SPLITS}")
+
+    y_true = np.vstack(y_true_all)
+    y_pred = np.vstack(y_pred_all)
+
+    print("\nPer-target CV metrics:")
+    for i, target in enumerate(TARGET_COLUMNS):
+        r2 = r2_score(y_true[:, i], y_pred[:, i])
+        rmse = float(np.sqrt(mean_squared_error(y_true[:, i], y_pred[:, i])))
+        print(f"- {target}: R2={r2:.4f}, RMSE={rmse:.4f}")
 
 
-def save_outputs(
-    model: MultiOutputRegressor,
-    feature_columns: Sequence[str],
-    extracted_features: pd.DataFrame,
-) -> None:
+def save_outputs(model: MultiOutputRegressor, X: pd.DataFrame, combined_df: pd.DataFrame) -> None:
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    FEATURE_COLUMNS_PATH.parent.mkdir(parents=True, exist_ok=True)
     FEATURES_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
+    FEATURE_COLUMNS_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     joblib.dump(model, MODEL_PATH)
+    combined_df.to_csv(FEATURES_CSV_PATH, index=False)
 
-    with FEATURE_COLUMNS_PATH.open("w", encoding="utf-8") as file_handle:
-        json.dump(list(feature_columns), file_handle, indent=2)
+    with FEATURE_COLUMNS_PATH.open("w", encoding="utf-8") as f:
+        json.dump(list(X.columns), f, indent=2)
 
-    extracted_features.to_csv(FEATURES_CSV_PATH, index=False)
-
-    print(f"Saved model to {MODEL_PATH}")
-    print(f"Saved feature columns to {FEATURE_COLUMNS_PATH}")
-    print(f"Saved extracted features to {FEATURES_CSV_PATH}")
+    log(f"Saved model: {MODEL_PATH}")
+    log(f"Saved features CSV: {FEATURES_CSV_PATH}")
+    log(f"Saved feature schema: {FEATURE_COLUMNS_PATH}")
 
 
 def main() -> None:
-    if not DATA_DIR.exists():
-        print(f"Missing data directory: {DATA_DIR}")
-        print("Create data/ in the project root and add LEMON .fif EEG files.")
+    log("Building merged metadata + targets")
+    merged = build_merged_targets_and_metadata()
+    if merged.empty:
+        warn("Merged metadata/targets table is empty. Exiting.")
         return
 
-    fif_files = sorted(DATA_DIR.rglob("*.fif")) + sorted(DATA_DIR.rglob("*.fif.gz"))
-    if not fif_files:
-        print(f"No .fif EEG files found in {DATA_DIR}")
-        print("Add LEMON .fif files under data/ and rerun this script.")
-        return
-
-    metadata = load_metadata(PHENOTYPE_CSV_PATH)
-    if metadata.empty:
-        print("Metadata could not be loaded. Please fix phenotype CSV and retry.")
-        return
-
-    X, y, extracted_features = build_dataset(data_dir=DATA_DIR, metadata=metadata)
+    log("Building EEG feature dataset")
+    X, y, combined_df = build_dataset(merged)
     if X.empty or y.empty:
-        print("Dataset assembly failed. Check participant IDs and EEG file naming.")
+        warn("Feature dataset is empty. Exiting.")
         return
 
-    model = train_model(X, y)
+    log("Training MultiOutput RandomForest model")
+    model = build_model()
+    model.fit(X, y)
+
+    log("Running KFold evaluation")
     evaluate_model(model, X, y)
 
-    feature_columns = list(X.columns)
-    plot_feature_importance(model, feature_columns, output_path=FEATURE_IMPORTANCE_PATH)
-    save_outputs(model, feature_columns, extracted_features)
+    log("Saving outputs")
+    save_outputs(model, X, combined_df)
 
 
 if __name__ == "__main__":
