@@ -51,6 +51,21 @@ Interview-safe takeaway:
 
 "For this feature space, the nonlinear tabular baseline was a better fit than the simple linear baseline."
 
+## Why Random Forest Likely Looks Stronger Here
+
+A good plain-English explanation is:
+
+- the inputs are tabular, not images or raw sequences
+- EO, EC, region summaries, and metadata can interact in nonlinear ways
+- ridge can only learn one linear weighting pattern
+- random forest can use thresholds and interactions more naturally
+
+Important honesty note:
+
+This is not proof that random forest is always the best model.
+
+It is an explanation for why it is a better fit in this current benchmark.
+
 ## Feature Variant Comparison
 
 The most interview-friendly comparison is among:
@@ -93,6 +108,16 @@ That is still a useful outcome because it shows disciplined ablation:
 - The project is an encouraging direction for a student benchmark project.
 - The current numbers are best interpreted as benchmark-first results.
 - The value is not just the best score. The value is also the reproducible design, the fair comparisons, and the clarity about what did and did not help.
+
+## If An Interviewer Asks About Strengths And Limits
+
+Strongest part:
+
+"The strongest part is the reproducible benchmark design: clear feature variants, fixed folds, fair comparisons, and saved outputs that make the results easy to inspect."
+
+More limited part:
+
+"The current feature family is still simple, so some targets remain more limited. That is why the project is strongest as a benchmark-first comparison rather than a broad prediction claim."
 
 ## Good Ways to Describe the Outcome
 

@@ -1,165 +1,27 @@
 # File-By-File Code Map
 
-This is a concise map of the files that matter most.
+This doc is for the moment when you open the repo and wonder:
 
-## `src/train_lemon_multitarget.py`
+Which files are core, which are optional, and what should I read first?
 
-What this file is for:
+## Best Way To Use This Doc
 
-- build the base subject-level EEG dataset
-- train the saved random-forest model used by the demo paths
-- save the feature schema and scaler metadata
+1. read this file once
+2. open the matching code file
+3. use the related deep walkthrough when you want more detail
 
-Main functions:
+The two most important walkthroughs are:
 
-- `load_metadata_and_targets()`
-- `find_subject_file_pairs()`
-- `load_and_preprocess_eeg()`
-- `compute_bandpower_features()`
-- `build_dataset()`
-- `save_outputs()`
-- `main()`
+- `docs/deep_walkthrough_train_lemon_multitarget.md`
+- `docs/deep_walkthrough_benchmark_v1.md`
 
-Execution flow:
+## Core Benchmark Files
 
-1. load metadata and cognitive targets
-2. find subjects with both EO and EC files
-3. preprocess EO and EC recordings
-4. compute bandpower features
-5. build one row per subject
-6. standardize targets for training
-7. train the final RF model
-8. save model and processed artifacts
-
-What an interviewer might ask:
-
-- "How do you turn raw EEG into a training row?"
-- "Where do age and gender enter?"
-- "What artifacts get saved for later inference?"
-
-Important blocks to understand:
-
-- `load_and_preprocess_eeg()`
-- `compute_bandpower_features()`
-- `build_dataset()`
-- `save_outputs()`
-- `main()`
-
-## `src/feature_variants.py`
+### `run_resume_benchmark.py`
 
 What this file is for:
 
-- define the public and exploratory feature variants
-- transform the base EO/EC table into alternate feature spaces
-
-Main functions:
-
-- `split_eo_ec_columns()`
-- `build_regional_mean_features()`
-- `build_per_channel_ratio_features()`
-- `build_frontal_alpha_asymmetry_features()`
-- `build_feature_variant()`
-
-Execution flow:
-
-1. split EO and EC columns
-2. confirm safe EO/EC pairing
-3. build the requested derived features
-4. append context columns like `age` and `gender`
-
-What an interviewer might ask:
-
-- "Why do you have multiple feature variants?"
-- "Which variants are public defaults?"
-- "How do region features get created?"
-
-Important blocks to understand:
-
-- `FEATURE_VARIANTS`
-- `ADVANCED_FEATURE_VARIANTS`
-- `infer_region()`
-- `build_regional_mean_features()`
-- `build_feature_variant()`
-
-## `src/split_manifest.py`
-
-What this file is for:
-
-- create, load, validate, and summarize subject-level fold assignments
-
-Main functions:
-
-- `generate_split_manifest()`
-- `load_split_manifest()`
-- `validate_split_manifest()`
-- `fold_counts()`
-
-Execution flow:
-
-1. deduplicate subject IDs
-2. create KFold splits at the subject level
-3. write one row per `(fold, id)` with `train` or `test`
-4. validate future runs against the dataset subject list
-
-What an interviewer might ask:
-
-- "Why save a split manifest instead of just rerunning KFold?"
-- "How do you avoid subject leakage?"
-
-Important blocks to understand:
-
-- `generate_split_manifest()`
-- `validate_split_manifest()`
-- `fold_counts()`
-
-## `src/benchmark_v1.py`
-
-What this file is for:
-
-- run the reproducible benchmark
-- compare models and feature variants on fixed subject-level splits
-- write benchmark CSVs and metadata
-
-Main functions:
-
-- `parse_args()`
-- `build_subject_level_dataset()`
-- `enforce_target_lock()`
-- `build_model()`
-- `evaluate_models()`
-- `summarize_results()`
-- `main()`
-
-Execution flow:
-
-1. parse CLI arguments
-2. build the subject-level dataset
-3. enforce target-column lock
-4. load or generate the split manifest
-5. build each requested feature variant
-6. fit each requested model on each fold
-7. inverse-transform predictions to raw target space
-8. write `fold_results.csv`, `summary_results.csv`, and `metadata.json`
-
-What an interviewer might ask:
-
-- "How do you keep the default benchmark small and explainable?"
-- "How do you prevent target leakage?"
-- "What files prove the run is reproducible?"
-
-Important blocks to understand:
-
-- `DEFAULT_MODEL_NAMES`
-- `parse_args()`
-- `enforce_target_lock()`
-- `evaluate_models()`
-- `main()`
-
-## `run_resume_benchmark.py`
-
-What this file is for:
-
-- give the repo one obvious interview-friendly benchmark command
+- the simplest public entrypoint for the benchmark
 
 Main functions:
 
@@ -171,54 +33,225 @@ Execution flow:
 
 1. read a small CLI
 2. force the public model list and public feature-variant list
-3. delegate to `src.benchmark_v1`
+3. delegate to `src/benchmark_v1.py`
 
-What an interviewer might ask:
+What an interviewer may ask:
 
-- "Why have a separate wrapper script?"
+- "Why have a wrapper script at all?"
 
-Important blocks to understand:
+Most important blocks:
 
 - `RESUME_MODELS`
 - `RESUME_FEATURE_VARIANTS`
 - `build_benchmark_argv()`
-- `main()`
 
-## `src/predict_my_report.py`
+Related doc:
+
+- `docs/deep_walkthrough_benchmark_v1.md`
+
+### `src/benchmark_v1.py`
 
 What this file is for:
 
-- demo sparse-input inference from a small set of report-style anchor values
+- the main reproducible benchmark runner
 
 Main functions:
 
-- `load_model()`
-- `load_feature_schema()`
-- `prepare_state_maps()`
+- `parse_args()`
+- `build_subject_level_dataset()`
+- `enforce_target_lock()`
+- `evaluate_models()`
+- `summarize_results()`
+- `main()`
+
+Execution flow:
+
+1. parse CLI arguments
+2. build the subject-level dataset
+3. check target-column definitions
+4. load or create the split manifest
+5. build each feature variant
+6. train each model on each fold
+7. convert predictions back to raw target space
+8. write summary CSVs and metadata
+
+What an interviewer may ask:
+
+- "How do you keep the benchmark reproducible?"
+
+Most important blocks:
+
+- `DEFAULT_MODEL_NAMES`
+- `parse_args()`
+- `enforce_target_lock()`
+- `zscore_targets_train_only()`
+- `evaluate_models()`
+- `main()`
+
+Related doc:
+
+- `docs/deep_walkthrough_benchmark_v1.md`
+
+### `src/train_lemon_multitarget.py`
+
+What this file is for:
+
+- build the base subject-level dataset from raw EEG and tabular metadata
+- train the saved random-forest model used by the optional demo paths
+
+Main functions:
+
+- `load_metadata_and_targets()`
+- `find_subject_file_pairs()`
+- `load_and_preprocess_eeg()`
+- `compute_bandpower_features()`
+- `build_dataset()`
+- `standardize_targets()`
+- `save_outputs()`
+- `main()`
+
+Execution flow:
+
+1. load metadata and targets
+2. find subjects with both EO and EC files
+3. preprocess EEG
+4. compute bandpower features
+5. build one row per subject
+6. standardize targets
+7. run a quick CV evaluation
+8. fit the final model on all data
+9. save artifacts
+
+What an interviewer may ask:
+
+- "How do you turn raw EEG into one tabular row?"
+
+Most important blocks:
+
+- `load_metadata_and_targets()`
+- `find_subject_file_pairs()`
+- `load_and_preprocess_eeg()`
+- `compute_bandpower_features()`
+- `build_dataset()`
+- `main()`
+
+Related doc:
+
+- `docs/deep_walkthrough_train_lemon_multitarget.md`
+
+### `src/feature_variants.py`
+
+What this file is for:
+
+- define the public and exploratory feature variants
+
+Main functions:
+
+- `split_eo_ec_columns()`
+- `build_regional_mean_features()`
+- `build_per_channel_ratio_features()`
+- `build_frontal_alpha_asymmetry_features()`
+- `build_feature_variant()`
+
+Execution flow:
+
+1. separate EO and EC columns
+2. verify safe EO/EC pairing
+3. build any requested derived features
+4. append context columns such as `age` and `gender`
+
+Note:
+
+The EO-minus-EC difference and EO/EC log-ratio logic live inside `build_feature_variant()` rather than in separate top-level helper functions.
+
+What an interviewer may ask:
+
+- "Why do you have multiple feature variants instead of one final feature table?"
+
+Most important blocks:
+
+- `FEATURE_VARIANTS`
+- `ADVANCED_FEATURE_VARIANTS`
+- `FEATURE_VARIANT_DESCRIPTIONS`
+- `infer_region()`
+- `build_feature_variant()`
+
+Related docs:
+
+- `docs/feature_variant_cheatsheet.md`
+- `docs/mental_model_of_data_flow.md`
+
+### `src/split_manifest.py`
+
+What this file is for:
+
+- create, save, load, and validate fixed subject-level folds
+
+Main functions:
+
+- `generate_split_manifest()`
+- `save_split_manifest()`
+- `load_split_manifest()`
+- `validate_split_manifest()`
+- `fold_counts()`
+
+Execution flow:
+
+1. deduplicate subject IDs
+2. create KFold assignments at the subject level
+3. write one row per `(fold, id, split)`
+4. validate later runs against the current dataset IDs
+
+What an interviewer may ask:
+
+- "Why save folds instead of generating them fresh every time?"
+
+Most important blocks:
+
+- `generate_split_manifest()`
+- `validate_split_manifest()`
+- `fold_counts()`
+
+Related docs:
+
+- `docs/ml_concepts_for_this_project.md`
+- `docs/deep_walkthrough_benchmark_v1.md`
+
+## Optional Demo Files
+
+### `src/predict_my_report.py`
+
+What this file is for:
+
+- exploratory sparse-input inference from a small set of report-style anchor values
+
+Main functions:
+
+- `print_demo_extension_note()`
+- `select_region_template()`
 - `build_final_input_dataframe()`
 - `main()`
 
 Execution flow:
 
 1. load saved artifacts
-2. start from a small set of anchor channel values
-3. estimate missing channels using simple region templates
-4. build a schema-compatible input row
+2. start from a small set of anchor values
+3. estimate missing channels with simple region templates
+4. build a schema-compatible row
 5. run prediction and print outputs
 
-What an interviewer might ask:
+What an interviewer may ask:
 
-- "How do you go from sparse report values to the full saved feature schema?"
 - "Why is this secondary to the benchmark?"
 
-Important blocks to understand:
+Most important blocks:
 
-- `REPORT_FEATURES`
+- `DEMO_REPORT_FEATURES`
 - `select_region_template()`
 - `build_final_input_dataframe()`
-- `print_exploratory_warning()`
+- `print_demo_extension_note()`
 
-## `backend/app/main.py`
+### `backend/app/main.py`
 
 What this file is for:
 
@@ -227,8 +260,8 @@ What this file is for:
 
 Main functions:
 
-- `build_demo_anchor_values()`
 - `lifespan()`
+- `get_prediction_service()`
 - `predict_manual()`
 - `predict_from_csv()`
 - `predict_from_pdf()`
@@ -241,24 +274,26 @@ Execution flow:
 3. routes validate input and call prediction helpers
 4. results are returned as JSON
 
-What an interviewer might ask:
+What an interviewer may ask:
 
-- "How does the backend initialize the model?"
-- "Which routes are real prediction paths and which are future extensions?"
+- "Which API routes are real prediction paths and which are future extensions?"
 
-Important blocks to understand:
+Most important blocks:
 
 - `lifespan()`
-- `get_prediction_service()`
 - `predict_from_csv()`
 - `predict_from_pdf()`
 - `predict_demo()`
 
-## `backend/app/services/feature_builder.py`
+Related doc:
+
+- `docs/web_layer_for_interviews.md`
+
+### `backend/app/services/feature_builder.py`
 
 What this file is for:
 
-- convert a small anchor-input representation into the full feature vector expected by the saved model
+- expand a small anchor-input representation into the full feature vector expected by the saved model
 
 Main class:
 
@@ -267,29 +302,31 @@ Main class:
 Execution flow:
 
 1. loop over every saved feature column
-2. fill `age` and `gender` directly
-3. fill direct anchor features when possible
-4. estimate missing channels by simple region rules
+2. fill `age` and `gender`
+3. fill direct anchor features when available
+4. estimate missing channels with simple region rules
 5. return a complete vector in schema order
 
-What an interviewer might ask:
+What an interviewer may ask:
 
-- "How do you handle missing non-anchor channels?"
-- "How do you keep the vector aligned with the training schema?"
+- "How do you go from a small manual input to the full saved schema?"
 
-Important blocks to understand:
+Most important blocks:
 
 - `build_vector()`
-- `_parse_conditioned_feature()`
 - `_estimate_conditioned_channel_value()`
 - `_estimate_plain_channel_value()`
 - `_channel_group()`
 
-## `backend/app/services/predictor.py`
+Related doc:
+
+- `docs/web_layer_for_interviews.md`
+
+### `backend/app/services/predictor.py`
 
 What this file is for:
 
-- load artifacts and expose prediction helpers for all API routes
+- load saved artifacts and expose shared prediction helpers for all routes
 
 Main class:
 
@@ -298,35 +335,36 @@ Main class:
 Execution flow:
 
 1. load model and feature schema
-2. build a `FeatureBuilder`
+2. create `FeatureBuilder`
 3. normalize anchor input
 4. build feature vectors
-5. call the model
+5. call the saved model
 6. map outputs to named targets
 
-What an interviewer might ask:
+What an interviewer may ask:
 
-- "Where does artifact loading happen?"
 - "How do manual and batch prediction share logic?"
 
-Important blocks to understand:
+Most important blocks:
 
 - `load()`
 - `predict_from_manual()`
 - `predict_from_anchors()`
 - `predict_batch()`
-- `_normalize_anchors()`
 
-## `frontend/app/HomeClient.tsx`
+Related doc:
+
+- `docs/web_layer_for_interviews.md`
+
+### `frontend/app/HomeClient.tsx`
 
 What this file is for:
 
 - provide the main demo UI for CSV, PDF, manual, and built-in demo workflows
 
-Main functions and structures:
+Main structures and handlers:
 
 - `buildDefaultManualInputs()`
-- `toNumericManualInputs()`
 - `handleCsvSubmit()`
 - `handlePdfSubmit()`
 - `handleDemoClick()`
@@ -334,21 +372,22 @@ Main functions and structures:
 
 Execution flow:
 
-1. initialize state with `useState`
+1. initialize UI state
 2. collect user input or file uploads
 3. send requests with `fetch`
-4. render loading, error, single-result, batch-result, or info states
+4. render loading, errors, predictions, or info messages
 
-What an interviewer might ask:
+What an interviewer may ask:
 
-- "How does the UI talk to the API?"
-- "Which workflow is the most representative?"
-- "Why is manual entry hidden under Advanced?"
+- "Which UI workflow is the most representative?"
 
-Important blocks to understand:
+Most important blocks:
 
-- constants for `CONDITIONS`, `ELECTRODES`, and `BANDS`
-- `buildDefaultManualInputs()`
-- the four submit handlers
-- the workflow cards
-- the result rendering section
+- workflow constants
+- the submit handlers
+- `ResultsPanel`
+- the CSV workflow card
+
+Related doc:
+
+- `docs/web_layer_for_interviews.md`

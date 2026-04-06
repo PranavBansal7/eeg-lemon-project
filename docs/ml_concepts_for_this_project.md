@@ -131,6 +131,25 @@ Plain-English version:
 
 "If I rerun this project later, I can tell whether a result changed because of a real code change or just because the setup drifted."
 
+## What Target Lock Means
+
+`src/benchmark_v1.py` checks that the benchmark is still using the expected source columns for:
+
+- `working_memory`
+- `attention`
+- `executive_function`
+- `intelligence`
+
+Why this matters:
+
+- phenotype files can change
+- column names can drift
+- a silent target-column change would make later comparisons much less trustworthy
+
+Plain-English version:
+
+"The benchmark does not just assume the same targets are still being used. It checks and records that assumption."
+
 ## The Main ML Story in One Paragraph
 
 "This repo is not trying to show the fanciest model. It is trying to show careful feature engineering, fair baseline comparisons, leakage-aware evaluation, and reproducible benchmarking on a real EEG tabular problem."

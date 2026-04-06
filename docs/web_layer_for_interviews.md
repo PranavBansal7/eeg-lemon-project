@@ -2,6 +2,8 @@
 
 This doc covers only the backend and frontend ideas that matter for this repository.
 
+Read this after the core benchmark docs. The benchmark path is still the main project story.
+
 The preferred framing is:
 
 "The web layer is a lightweight demo around saved EEG benchmark artifacts. It is secondary to the benchmark, but it is still useful because it shows API design, schema validation, and UI wiring around a trained model."
