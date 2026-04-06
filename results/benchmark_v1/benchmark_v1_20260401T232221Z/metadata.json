@@ -1,0 +1,55 @@
+{
+  "timestamp_utc": "20260401T232221Z",
+  "experiment_name": "benchmark_v1",
+  "run_id": "benchmark_v1_20260401T232221Z",
+  "split_manifest_path": "/workspaces/eeg-lemon-project/processed/splits/benchmark_v1_splits.csv",
+  "results_dir": "/workspaces/eeg-lemon-project/results/benchmark_v1/benchmark_v1_20260401T232221Z",
+  "random_state": 42,
+  "requested_n_splits": 5,
+  "effective_n_splits": 5,
+  "dataset_subject_count": 200,
+  "target_definition": {
+    "expected_target_columns": {
+      "working_memory": "TAP_WM_1",
+      "attention": "TAP_A_1",
+      "executive_function": "TAP_I_1",
+      "intelligence": "WST_1"
+    },
+    "resolved_target_columns": {
+      "working_memory": "TAP_WM_1",
+      "attention": "TAP_A_1",
+      "executive_function": "TAP_I_1",
+      "intelligence": "WST_1"
+    },
+    "target_lock_passed": true,
+    "target_drift": {},
+    "allow_target_fallback": false
+  },
+  "models_requested": [
+    "ridge",
+    "random_forest"
+  ],
+  "feature_variants_requested": [
+    "eo_ec_concat",
+    "eo_ec_concat_plus_diff",
+    "eo_ec_concat_plus_regions",
+    "eo_ec_concat_plus_diff_plus_regions"
+  ],
+  "feature_variant_logratio_eps": 1e-06,
+  "model_registry": {
+    "ridge": {
+      "wrapped_multioutput": false
+    },
+    "random_forest": {
+      "wrapped_multioutput": false
+    }
+  },
+  "target_scaling_for_cv": {
+    "method": "zscore_train_fold_only",
+    "prediction_inverse_transform": "to_raw_target_space",
+    "metrics_space": "raw"
+  },
+  "notes": {
+    "report_style_prediction": "exploratory only"
+  }
+}

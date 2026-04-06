@@ -19,7 +19,19 @@ if not hasattr(np, "trapz") and hasattr(np, "trapezoid"):
     np.trapz = np.trapezoid  # type: ignore[attr-defined]
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+def resolve_project_root() -> Path:
+    default_root = Path(__file__).resolve().parent.parent
+    if (default_root / "data").exists():
+        return default_root
+
+    alt_root = Path("/workspaces") / default_root.name
+    if (alt_root / "data").exists():
+        return alt_root
+
+    return default_root
+
+
+PROJECT_ROOT = resolve_project_root()
 DATA_DIR = PROJECT_ROOT / "data"
 EEG_DIR = DATA_DIR / "eeg" / "EEG_Preprocessed_BIDS_ID"
 
