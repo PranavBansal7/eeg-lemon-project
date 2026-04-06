@@ -1,3 +1,13 @@
+"""Build the base EEG dataset and save the main training artifacts.
+
+This script has four main stages:
+
+1. load metadata and target tables
+2. load and lightly preprocess EO/EC EEG recordings
+3. compute Welch PSD bandpower features for each subject
+4. train, evaluate, and save the baseline model artifacts used elsewhere
+"""
+
 from __future__ import annotations
 
 import json
@@ -20,6 +30,8 @@ if not hasattr(np, "trapz") and hasattr(np, "trapezoid"):
 
 
 def resolve_project_root() -> Path:
+    # Prefer the repo containing `data/`, but keep a small fallback for common
+    # workspace layouts so the script is easier to run in different environments.
     default_root = Path(__file__).resolve().parent.parent
     if (default_root / "data").exists():
         return default_root
@@ -268,6 +280,8 @@ def load_target_table(
 
 
 def load_metadata_and_targets() -> Tuple[pd.DataFrame, Dict[str, str]]:
+    # Keep metadata and target loading explicit so it is easy to explain which
+    # tables feed the final regression dataset.
     metadata = load_metadata()
     if metadata.empty:
         return pd.DataFrame(), {}
@@ -283,6 +297,7 @@ def load_metadata_and_targets() -> Tuple[pd.DataFrame, Dict[str, str]]:
     selected_target_columns: Dict[str, str] = {}
 
     for alias, csv_path, preferred_col in target_specs:
+        # Merge one target at a time so we can log exactly where rows drop.
         target_df, selected_col = load_target_table(csv_path, alias, preferred_col)
         if target_df.empty or selected_col is None:
             warn(f"Target table for {alias} is empty. Stopping dataset assembly.")
@@ -321,6 +336,8 @@ def find_subject_file_pairs() -> Dict[str, Dict[str, Path]]:
         if subject_id is not None:
             ec_files[subject_id] = path
 
+    # The benchmark only makes sense when we have both resting-state conditions
+    # for the same subject, because EO/EC contrast is part of the feature story.
     shared_subjects = sorted(set(eo_files.keys()) & set(ec_files.keys()))
     only_eo = sorted(set(eo_files.keys()) - set(ec_files.keys()))
     only_ec = sorted(set(ec_files.keys()) - set(eo_files.keys()))
@@ -346,6 +363,8 @@ def load_and_preprocess_eeg(file_path: Path) -> Optional[mne.io.BaseRaw]:
 
     try:
         processed = raw.copy()
+        # Keep preprocessing intentionally light and reproducible: EEG channels
+        # only, use marked bad channels if available, then apply average reference.
         processed.pick(picks="eeg", exclude="bads")
         if len(processed.ch_names) == 0:
             warn(f"No EEG channels available after picking EEG: {file_path.name}")
@@ -370,6 +389,8 @@ def compute_bandpower_features(raw: mne.io.BaseRaw, state_suffix: str) -> Dict[s
 
     n_fft = min(2048, n_times)
 
+    # Welch PSD is an FFT-based spectral estimation method that averages
+    # spectra across windows to make the frequency estimate more stable.
     psd, freqs = mne.time_frequency.psd_array_welch(
         eeg_data,
         sfreq=sfreq,
@@ -389,6 +410,8 @@ def compute_bandpower_features(raw: mne.io.BaseRaw, state_suffix: str) -> Dict[s
             if np.count_nonzero(mask) < 2:
                 bandpower = 0.0
             else:
+                # Bandpower is created by integrating PSD values inside a named
+                # frequency range such as alpha or beta.
                 bandpower = float(np.trapz(psd[ch_idx, mask], freqs[mask]))
 
             feature_name = f"{clean_ch}_{band_name}_{state_suffix}"
@@ -442,6 +465,8 @@ def build_dataset(
 
         row = metadata_by_id.loc[subject_id]
 
+        # Each subject becomes one tabular ML row: EO features, EC features,
+        # simple metadata, and the four target values.
         combined_features: Dict[str, float] = {}
         combined_features.update(eo_features)
         combined_features.update(ec_features)
@@ -481,6 +506,8 @@ def build_dataset(
 
 
 def standardize_targets(y_raw: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, float], Dict[str, float]]:
+    # Save the mean/std per target so training can happen in a normalized space
+    # while later reporting can still return to raw target units.
     means = y_raw.mean(axis=0)
     stds = y_raw.std(axis=0, ddof=0)
 
@@ -569,6 +596,8 @@ def save_outputs(
     features_df: pd.DataFrame,
     scaler_payload: Dict[str, object],
 ) -> None:
+    # Save the full set of artifacts needed by the optional demo/inference path:
+    # trained model, feature table, feature schema, and target-scaling metadata.
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     FEATURES_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
     FEATURE_COLUMNS_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -610,6 +639,8 @@ def main() -> None:
 
     if STANDARDIZE_TARGETS:
         log("Standardizing targets to z-scores")
+        # Standardizing targets can make the multi-target training problem more
+        # numerically stable while still letting us save the raw-space statistics.
         y_train, target_means, target_stds = standardize_targets(y_raw)
 
         for alias in TARGET_ALIASES:

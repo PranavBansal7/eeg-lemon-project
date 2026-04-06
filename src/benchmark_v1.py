@@ -74,6 +74,10 @@ DEFAULT_EXPERIMENT_NAME = "benchmark_v1"
 DEFAULT_LOGRATIO_EPS = 1e-6
 ALL_MODEL_NAMES = ["dummy", "ridge", "elasticnet", "random_forest", "hist_gb"]
 DEFAULT_MODEL_NAMES = ["dummy", "ridge", "random_forest"]
+DEFAULT_SUITE_EXPLANATION = (
+    "dummy as the floor, ridge as the linear baseline, and random_forest as the "
+    "stronger nonlinear tabular baseline across the three public EO/EC variants"
+)
 FOLD_RESULTS_COLUMNS = [
     "experiment_name",
     "run_id",
@@ -110,7 +114,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Benchmark v1: fixed-fold EEG regression benchmarking with an interview-friendly "
-            "baseline suite by default and optional exploratory extensions."
+            "baseline suite by default and optional exploratory extensions. The default "
+            "suite uses dummy, ridge, and random_forest across the three public EO/EC variants."
         )
     )
     parser.add_argument("--split-manifest", type=Path, default=DEFAULT_SPLIT_PATH)
@@ -289,6 +294,8 @@ def build_model(model_name: str, random_state: int):
 
 
 def zscore_targets_train_only(y_train: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, float], Dict[str, float]]:
+    # Fit target scaling on the train fold only so test-fold target statistics
+    # never leak into training or make cross-validation look better than it is.
     means = y_train.mean(axis=0)
     stds = y_train.std(axis=0, ddof=0)
     safe_stds = stds.copy()
@@ -425,6 +432,33 @@ def summarize_results(fold_results: pd.DataFrame) -> pd.DataFrame:
     return summary[SUMMARY_RESULTS_COLUMNS]
 
 
+def print_human_readable_summary(summary_results: pd.DataFrame) -> None:
+    """Print a compact end-of-run summary that is easy to read in the terminal."""
+    if summary_results.empty:
+        print("\n[INFO] Human-readable summary: no benchmark rows were produced.")
+        return
+
+    overall_best = summary_results.sort_values(by="r2_mean", ascending=False).iloc[0]
+    best_per_target = (
+        summary_results.sort_values(by=["target", "r2_mean"], ascending=[True, False])
+        .groupby("target", as_index=False)
+        .first()
+    )
+
+    print("\n[INFO] Human-readable summary:")
+    print(
+        "- Best single target/model/variant row: "
+        f"{overall_best['target']} with {overall_best['model_name']} + "
+        f"{overall_best['feature_variant']} (mean CV R2={overall_best['r2_mean']:.3f})"
+    )
+    print("- Best row per target:")
+    for _, row in best_per_target.iterrows():
+        print(
+            f"  - {row['target']}: {row['model_name']} + {row['feature_variant']} "
+            f"| mean CV R2={row['r2_mean']:.3f}, mean Pearson r={row['pearson_r_mean']:.3f}"
+        )
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
     args = parse_args(argv)
 
@@ -479,8 +513,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
     if selected_models == DEFAULT_MODEL_NAMES and selected_feature_variants == FEATURE_VARIANTS:
         print(
-            "\n[INFO] Running the interview-friendly baseline benchmark suite "
-            "(dummy, ridge, random_forest) across the public EO/EC feature variants."
+            "\n[INFO] Running the interview-friendly default suite: "
+            f"{DEFAULT_SUITE_EXPLANATION}."
         )
     else:
         print(
@@ -543,6 +577,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     print(f"- fold results: {fold_results_path}")
     print(f"- summary results: {summary_results_path}")
     print(f"- split summary: {split_summary_path}")
+    print_human_readable_summary(summary_results)
 
 
 if __name__ == "__main__":

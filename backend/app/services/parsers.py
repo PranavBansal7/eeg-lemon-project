@@ -1,3 +1,5 @@
+"""Parse uploaded demo inputs into the anchor representation used by the API."""
+
 from __future__ import annotations
 
 import csv
@@ -10,6 +12,7 @@ from app.config import ANCHOR_CHANNELS, BANDS, CONDITIONS
 
 
 def parse_gender_value(value: Any) -> float:
+    """Accept flexible gender inputs and normalize them to the model's numeric form."""
     if isinstance(value, (int, float)):
         return float(value)
 
@@ -31,6 +34,7 @@ def parse_gender_value(value: Any) -> float:
 
 
 def parse_float_value(value: Any, field_name: str) -> float:
+    """Convert a value to float with a field-specific error message."""
     try:
         return float(value)
     except (TypeError, ValueError) as exc:
@@ -38,6 +42,7 @@ def parse_float_value(value: Any, field_name: str) -> float:
 
 
 async def parse_csv_upload(file: UploadFile) -> list[dict[str, Any]]:
+    """Read an uploaded CSV file into row dictionaries for later parsing."""
     content = await file.read()
     if not content:
         raise ValueError("Uploaded CSV file is empty.")
@@ -66,6 +71,12 @@ def extract_anchor_payload_from_row(
     row: Mapping[str, Any],
     row_number: int,
 ) -> tuple[float, float, dict[str, dict[str, dict[str, float]]]]:
+    """Convert one CSV row into age, gender, and nested anchor EEG values.
+
+    The parser accepts several header styles so the demo CSV workflow stays easy
+    to test. The normalized output matches the `anchors[condition][channel][band]`
+    shape used by the rest of the backend.
+    """
     normalized_row = {
         _normalize_key(key): value for key, value in row.items() if key is not None
     }
@@ -88,6 +99,8 @@ def extract_anchor_payload_from_row(
     for condition in CONDITIONS:
         for channel in ANCHOR_CHANNELS:
             for band in BANDS:
+                # Accept a few common conditioned header layouts so uploaded CSVs
+                # can stay readable without forcing one exact naming pattern.
                 conditioned_candidates = [
                     f"{channel}_{band}_{condition}",
                     f"{condition}_{channel}_{band}",
@@ -122,6 +135,7 @@ def extract_anchor_payload_from_row(
 
 
 def _lookup_value(row: Mapping[str, Any], candidates: list[str]) -> Any:
+    """Return the first matching value from a list of candidate header names."""
     for candidate in candidates:
         key = _normalize_key(candidate)
         if key in row:
@@ -130,4 +144,5 @@ def _lookup_value(row: Mapping[str, Any], candidates: list[str]) -> Any:
 
 
 def _normalize_key(text: str) -> str:
+    """Normalize headers so simple punctuation differences do not matter."""
     return text.strip().lower().replace(" ", "_").replace("-", "_").replace(".", "_")

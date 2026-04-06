@@ -1,3 +1,5 @@
+"""Load saved artifacts and run the lightweight demo prediction workflows."""
+
 from __future__ import annotations
 
 import json
@@ -38,6 +40,7 @@ class PredictionService:
         self.feature_builder: FeatureBuilder | None = None
 
     def load(self) -> "PredictionService":
+        """Load the saved model and feature schema once at startup."""
         if not self.model_path.exists():
             raise FileNotFoundError(f"Model file not found at {self.model_path}")
 
@@ -57,10 +60,13 @@ class PredictionService:
             )
 
         self.feature_columns = [str(column) for column in columns]
+        # The feature builder is the bridge from anchor EEG inputs to the full
+        # saved training schema expected by the model artifact.
         self.feature_builder = FeatureBuilder(self.feature_columns)
         return self
 
     def predict_from_manual(self, payload: ManualPredictionRequest) -> dict[str, float]:
+        """Run the manual JSON workflow after converting the schema model to anchors."""
         anchors = self._manual_payload_to_anchors(payload)
         return self.predict_from_anchors(
             age=payload.age,
@@ -74,12 +80,15 @@ class PredictionService:
         gender: Any,
         anchors: Mapping[str, Mapping[str, Mapping[str, Any]]],
     ) -> dict[str, float]:
+        """Predict one subject from age, gender, and nested anchor EEG values."""
         self._ensure_loaded()
 
         age_value = float(age)
         gender_value = parse_gender_value(gender)
         normalized_anchors = self._normalize_anchors(anchors)
 
+        # Build a vector in the exact saved schema order so the demo workflow
+        # reuses the same model artifact as the training pipeline.
         feature_vector = self.feature_builder.build_vector(
             normalized_anchors,
             age=age_value,
@@ -94,6 +103,7 @@ class PredictionService:
         self,
         records: Sequence[tuple[float, Any, Mapping[str, Mapping[str, Mapping[str, Any]]]]],
     ) -> list[dict[str, float]]:
+        """Predict multiple rows for the CSV demo workflow."""
         self._ensure_loaded()
 
         feature_vectors: list[list[float]] = []
@@ -115,6 +125,7 @@ class PredictionService:
         return [self._to_target_dict(row) for row in rows]
 
     def _ensure_loaded(self) -> None:
+        """Guard against calling prediction helpers before startup loading runs."""
         if self.model is None or self.feature_builder is None:
             raise RuntimeError("PredictionService is not loaded. Call load() first.")
 
@@ -122,6 +133,7 @@ class PredictionService:
     def _manual_payload_to_anchors(
         payload: ManualPredictionRequest,
     ) -> dict[str, dict[str, dict[str, float]]]:
+        """Convert the validated Pydantic request into the nested anchor format."""
         def dump_model(model: Any) -> dict[str, Any]:
             if hasattr(model, "model_dump"):
                 return model.model_dump()
@@ -136,6 +148,7 @@ class PredictionService:
     def _normalize_anchors(
         anchors: Mapping[str, Mapping[str, Mapping[str, Any]]],
     ) -> dict[str, dict[str, dict[str, float]]]:
+        """Normalize condition, channel, and band keys into a consistent lowercase map."""
         normalized: dict[str, dict[str, dict[str, float]]] = {}
 
         for condition, channels in anchors.items():
@@ -169,6 +182,7 @@ class PredictionService:
         return normalized
 
     def _extract_prediction_rows(self, raw_output: Any, expected_rows: int) -> list[list[float]]:
+        """Normalize model output shape so single-row and batch paths look the same."""
         output_array = np.asarray(raw_output, dtype=float)
 
         if output_array.ndim == 1:
@@ -182,6 +196,7 @@ class PredictionService:
         return output_array.tolist()
 
     def _to_target_dict(self, values: Sequence[float]) -> dict[str, float]:
+        """Map ordered model outputs back to named benchmark targets."""
         if len(values) < len(self.target_names):
             raise RuntimeError(
                 "Model output has fewer targets than expected. "

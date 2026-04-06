@@ -1,4 +1,11 @@
-"""Construct interview-friendly and exploratory EEG feature variants."""
+"""Construct interview-friendly and exploratory EEG feature variants.
+
+This module intentionally separates two stories:
+
+- `FEATURE_VARIANTS` is the small public/default set used by the main benchmark
+- `ADVANCED_FEATURE_VARIANTS` keeps broader exploratory ideas available without
+  making them the main interview narrative
+"""
 
 from __future__ import annotations
 
@@ -33,6 +40,30 @@ ADVANCED_FEATURE_VARIANTS = [
 
 ALL_FEATURE_VARIANTS = FEATURE_VARIANTS + ADVANCED_FEATURE_VARIANTS
 
+FEATURE_VARIANT_DESCRIPTIONS = {
+    "eo_ec_concat": (
+        "Baseline: keep EO and EC as separate feature subspaces in the same row."
+    ),
+    "eo_ec_concat_plus_regions": (
+        "Baseline plus interpretable region-level summaries such as frontal and occipital means."
+    ),
+    "eo_ec_concat_plus_diff_plus_regions": (
+        "Public best-story variant: EO, EC, EO-minus-EC differences, and region summaries."
+    ),
+    "eo_only": "Exploratory ablation that keeps only eyes-open features.",
+    "ec_only": "Exploratory ablation that keeps only eyes-closed features.",
+    "eo_ec_diff": "Exploratory ablation that keeps only EO-minus-EC difference features.",
+    "eo_ec_logratio": "Exploratory contrast view using log(EO+eps)-log(EC+eps).",
+    "eo_ec_concat_plus_diff": "EO and EC together plus explicit EO-minus-EC differences.",
+    "eo_ec_concat_plus_logratio": "EO and EC together plus log-ratio contrast features.",
+    "eo_ec_concat_plus_diff_plus_regions_plus_ratios": (
+        "Exploratory extension that adds handcrafted within-channel ratio features."
+    ),
+    "eo_ec_concat_plus_diff_plus_regions_plus_ratios_plus_asymmetry": (
+        "Most handcrafted exploratory variant: ratios plus frontal alpha asymmetry."
+    ),
+}
+
 BAND_SUFFIXES = [
     "low_alpha",
     "high_alpha",
@@ -61,6 +92,13 @@ RATIO_FEATURE_SPECS: List[Tuple[str, str, str]] = [
 
 def _sorted_by_base(mapping: Dict[str, str]) -> List[Tuple[str, str]]:
     return sorted(mapping.items(), key=lambda item: item[0])
+
+
+def describe_feature_variant(name: str) -> str:
+    """Return the short human explanation for a feature variant name."""
+    if name not in FEATURE_VARIANT_DESCRIPTIONS:
+        raise ValueError(f"Unknown feature variant: {name}")
+    return FEATURE_VARIANT_DESCRIPTIONS[name]
 
 
 def split_eo_ec_columns(columns: Sequence[str]) -> Tuple[Dict[str, str], Dict[str, str], List[str]]:
@@ -302,6 +340,9 @@ def build_feature_variant(X: pd.DataFrame, variant: str, eps: float) -> pd.DataF
 
     out_parts: List[pd.DataFrame] = []
 
+    # The interview-friendly story is a simple progression: keep EO/EC separate,
+    # optionally add region summaries, then add explicit EO-minus-EC contrast.
+    # Narrower ablations such as EO-only and EC-only still stay available here.
     if variant == "eo_only":
         out_parts.append(X[eo_columns].copy())
     elif variant == "ec_only":
@@ -353,6 +394,8 @@ def build_feature_variant(X: pd.DataFrame, variant: str, eps: float) -> pd.DataF
         diff_dict = {f"{base}_diff": X[eo_map[base]] - X[ec_map[base]] for base in paired_bases}
         out_parts.append(pd.DataFrame(diff_dict, index=X.index))
         out_parts.append(build_regional_mean_features(X, eo_map=eo_map, ec_map=ec_map, paired_bases=paired_bases))
+    # Advanced variants stay available for exploratory comparisons, but they are
+    # intentionally not part of the default benchmark story.
     elif variant == "eo_ec_concat_plus_diff_plus_regions_plus_ratios":
         out_parts.append(X[eo_columns].copy())
         out_parts.append(X[ec_columns].copy())

@@ -1,3 +1,11 @@
+"""Build full model feature vectors from a small anchor-input representation.
+
+The training pipeline saves a wide feature schema. The demo API does not ask the
+user for every one of those values. Instead, it asks for a small set of anchor
+channels and expands those anchors into the full saved schema with simple,
+explainable region-based fallbacks.
+"""
+
 from __future__ import annotations
 
 from typing import Mapping, Optional, Sequence
@@ -14,12 +22,21 @@ AnchorValues = Mapping[str, Mapping[str, Mapping[str, float]]]
 
 
 class FeatureBuilder:
-    """Build full model feature vectors from a small set of anchor EEG inputs."""
+    """Expand anchor EEG inputs into the full feature vector expected by the model."""
 
     def __init__(self, feature_columns: Sequence[str]) -> None:
+        # Store the saved schema in normalized lowercase form so lookup stays
+        # consistent across manual input, CSV upload, and demo workflows.
         self.feature_columns = [col.lower() for col in feature_columns]
 
     def build_vector(self, anchors: AnchorValues, age: float, gender: float) -> list[float]:
+        """Walk the saved feature schema in order and fill each feature value.
+
+        Direct anchor values are used first. When a requested feature is not an
+        anchor channel, the builder falls back to simple region-based estimates.
+        This keeps the demo path easy to explain while still matching the saved
+        training schema exactly.
+        """
         vector: list[float] = []
 
         for feature_name in self.feature_columns:
@@ -33,6 +50,7 @@ class FeatureBuilder:
 
             conditioned_parts = self._parse_conditioned_feature(feature_name)
             if conditioned_parts is not None:
+                # Conditioned feature example: `f3_alpha_eo`
                 channel, band, condition = conditioned_parts
                 vector.append(
                     self._estimate_conditioned_channel_value(anchors, channel, band, condition)
@@ -41,10 +59,13 @@ class FeatureBuilder:
 
             plain_parts = self._parse_plain_feature(feature_name)
             if plain_parts is not None:
+                # Plain feature example: `f3_alpha`; use both conditions if needed.
                 channel, band = plain_parts
                 vector.append(self._estimate_plain_channel_value(anchors, channel, band))
                 continue
 
+            # Unknown or unsupported schema items fall back to zero so the vector
+            # length still matches the saved training schema.
             vector.append(0.0)
 
         return vector
@@ -79,6 +100,8 @@ class FeatureBuilder:
         band: str,
         condition: str,
     ) -> float:
+        # First prefer the exact anchor value. If that channel was not provided,
+        # fall back to a simple region estimate for the same condition.
         direct_value = self._anchor_value(anchors, condition, channel, band)
         if direct_value is not None:
             return direct_value
@@ -99,6 +122,8 @@ class FeatureBuilder:
         channel: str,
         band: str,
     ) -> float:
+        # Plain features are estimated across EO and EC because they are not tied
+        # to one condition in the saved schema.
         if channel in ANCHOR_CHANNELS:
             channel_values = [
                 self._anchor_value(anchors, condition, channel, band)
@@ -129,6 +154,7 @@ class FeatureBuilder:
 
     @staticmethod
     def _channel_group(channel: str) -> str:
+        """Assign a channel to a simple region bucket for demo-time estimation."""
         c = channel.lower()
 
         if c.startswith(("fp", "af", "f", "fc", "ft")):
@@ -149,6 +175,7 @@ class FeatureBuilder:
         channel: str,
         band: str,
     ) -> Optional[float]:
+        """Return an exact anchor value when it exists."""
         try:
             value = anchors[condition][channel][band]
             return float(value)
@@ -161,6 +188,7 @@ class FeatureBuilder:
         condition: str,
         band: str,
     ) -> float:
+        """Use the mean of the frontal anchors F3/F4/FZ for frontal fallbacks."""
         values = [
             self._anchor_value(anchors, condition, frontal_channel, band)
             for frontal_channel in FRONTAL_ANCHORS
@@ -198,6 +226,7 @@ class FeatureBuilder:
         condition: str,
         band: str,
     ) -> float:
+        """Last-condition fallback: average whatever anchor values exist for that band."""
         values = [
             self._anchor_value(anchors, condition, channel, band)
             for channel in ANCHOR_CHANNELS
@@ -219,6 +248,7 @@ class FeatureBuilder:
         return 0.0
 
     def _plain_band_mean(self, anchors: AnchorValues, band: str) -> float:
+        """Last-global fallback: average the band across EO and EC."""
         values = [self._condition_band_mean(anchors, condition, band) for condition in CONDITIONS]
         values = [value for value in values if value is not None]
         if values:
@@ -227,6 +257,7 @@ class FeatureBuilder:
 
     @staticmethod
     def _mean(values: Sequence[float]) -> float:
+        """Return a safe mean that falls back to 0.0 for empty inputs."""
         if not values:
             return 0.0
         return float(sum(values) / len(values))

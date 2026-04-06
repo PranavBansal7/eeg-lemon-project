@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 def build_demo_anchor_values() -> dict[str, dict[str, dict[str, float]]]:
+    """Create one built-in anchor example for the lightweight demo route."""
     base_band_values = {
         "delta": 2.40,
         "theta": 2.10,
@@ -74,6 +75,7 @@ def build_demo_anchor_values() -> dict[str, dict[str, dict[str, float]]]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Load the saved artifacts once so request handlers can stay lightweight."""
     predictor = PredictionService()
     try:
         predictor.load()
@@ -107,6 +109,7 @@ app.add_middleware(
 
 
 def get_prediction_service() -> PredictionService:
+    """Return the loaded prediction service from FastAPI app state."""
     service = getattr(app.state, "prediction_service", None)
     if service is None:
         raise HTTPException(
@@ -201,6 +204,8 @@ async def predict_from_csv(
     records = []
     for row_index, row in enumerate(rows, start=1):
         try:
+            # Parse each CSV row into the same anchor structure used by the
+            # manual and built-in demo workflows.
             age, gender, anchors = extract_anchor_payload_from_row(row, row_index)
             records.append((age, gender, anchors))
         except ValueError as exc:
@@ -238,20 +243,20 @@ async def predict_from_pdf(file: UploadFile = File(...)) -> PdfPredictionRespons
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded PDF file is empty.")
 
-    # Exploratory PDF upload extension. It currently acknowledges the file but
-    # does not extract EEG features or produce a model prediction yet.
+    # Future-facing PDF route. It already validates and acknowledges uploads,
+    # while the actual report-parsing step remains an exploratory extension.
     return PdfPredictionResponse(
         message=(
-            "PDF upload is included as an exploratory extension. The current "
-            "implementation acknowledges the file but does not generate an EEG "
-            "prediction yet."
+            "PDF upload is available as a future extension. The current demo "
+            "acknowledges the file and keeps the path ready for later report "
+            "parsing into anchor EEG values."
         ),
         experimental=True,
         filename=filename,
         size_bytes=len(content),
         notes=(
-            "Future extension: extract report text or tables into anchor EEG values, "
-            "then reuse the same manual/CSV prediction path."
+            "Intended next step: extract report text or tables into anchor EEG "
+            "values, then reuse the existing manual/CSV prediction path."
         ),
     )
 

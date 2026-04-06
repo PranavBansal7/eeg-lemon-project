@@ -1,8 +1,10 @@
 # NeuroScope Master Guide
 
-## NeuroScope: EEG-Based Cognitive Prediction from Resting-State Signals
+## NeuroScope: Benchmark-First EEG Feature and Prediction Study Guide
 
 A complete step-by-step study guide for understanding this project, with the main emphasis on the ML benchmark and the web layer treated as a lightweight demo extension.
+
+For the most organized learning path, start with `docs/README.md`. This file works best as a longer companion note.
 
 ---
 
@@ -18,7 +20,7 @@ This guide is written for you if:
 
 ## 1) Project Goal in One Paragraph
 
-NeuroScope predicts four cognitive outcomes from resting-state EEG:
+NeuroScope benchmarks four exploratory cognitive targets from resting-state EEG:
 
 1. working_memory
 2. attention
@@ -36,7 +38,7 @@ It does this by extracting EO and EC bandpower features from EEGLAB `.set` files
 3. Model is trained and saved in `models/rf_model.pkl`.
 4. Feature schema is saved in `processed/feature_columns.json`.
 5. Backend loads these artifacts once at startup.
-6. The optional frontend calls backend endpoints for manual, CSV, placeholder PDF, and demo workflows.
+6. The optional frontend calls backend endpoints for manual, CSV, future-extension PDF, and demo workflows.
 
 Simple flow:
 
@@ -284,7 +286,7 @@ Why this matters: avoids reloading model every request.
 2. `GET /` -> root info
 3. `POST /predict-manual` -> direct EO/EC values
 4. `POST /predict-from-csv` -> batch predictions
-5. `POST /predict-from-pdf` -> experimental placeholder
+5. `POST /predict-from-pdf` -> future-extension acknowledgement route
 6. `GET /predict-demo` -> built-in demo input
 
 ### 9.4 Prediction Service Layer
@@ -323,7 +325,7 @@ Main UI file: `frontend/app/HomeClient.tsx`
 It gives 4 lightweight demo workflows:
 
 1. Upload CSV
-2. Upload PDF (experimental)
+2. Upload PDF (future extension)
 3. Manual EO/EC entry
 4. Demo prediction
 
@@ -512,7 +514,7 @@ Frontend calls same-origin `/api` routes. Next.js rewrites proxy these requests 
 Answer:
 
 1. No explicit uncertainty estimation.
-2. PDF pipeline is placeholder.
+2. PDF pipeline is currently a future extension with an acknowledgement response.
 3. Model family is baseline classical ML; no deep sequence model comparison yet.
 4. Predictions are exploratory, not clinical.
 

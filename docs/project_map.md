@@ -2,85 +2,111 @@
 
 ## What This Repo Is
 
-This project is a reproducible EEG regression benchmark.
+This repository is a reproducible EEG feature-engineering and regression benchmark.
 
 In plain English, it asks:
 
-"If I take resting-state EEG recordings, turn them into simple numeric features, and compare a few baseline models carefully, how much useful predictive signal is there?"
+"If I turn resting-state EEG into simple, explainable tabular features, how much predictive signal can I recover, and which feature design works best?"
 
-The repo is strongest as a machine learning benchmark project, not as a product.
+The repo is strongest as a benchmark project:
 
-## The Big Picture
+- build subject-level EEG features from paired eyes-open and eyes-closed recordings
+- compare a small set of feature variants and baseline models
+- save enough metadata and outputs that the comparison can be rerun and explained later
 
-The flow is:
+## Big Picture
 
-1. load EEG files plus metadata and target tables
-2. build subject-level EEG features
-3. compare a small set of feature variants and baseline models
-4. save results so the run can be repeated and explained later
+```text
+EO .set file + EC .set file + metadata + targets
+                    |
+                    v
+        match usable subjects by ID
+                    |
+                    v
+      preprocess EEG (EEG-only, drop bads,
+           average reference if possible)
+                    |
+                    v
+      Welch PSD from 1-30 Hz for each channel
+                    |
+                    v
+     integrate power inside named bands
+      -> delta, theta, alpha, beta, ...
+                    |
+                    v
+   create features like f3_alpha_eo, f3_alpha_ec
+                    |
+                    v
+     build feature variant for benchmarking
+                    |
+                    v
+  fixed subject-level CV with dummy / ridge / RF
+                    |
+                    v
+ save fold_results.csv, summary_results.csv,
+ split manifest, and metadata.json
+```
 
-There is also a backend and frontend in the repo, but they are optional demo layers on top of saved model artifacts.
+There is also a backend and frontend in the repo, but they are optional demo layers on top of saved artifacts rather than the main evaluated contribution.
 
 ## What Data Comes In
 
 The main inputs are:
 
-- resting-state EEG files in `data/eeg/EEG_Preprocessed_BIDS_ID`
-- metadata and cognitive target tables in `data/phenotype/Behavioural_Data_MPILMBB_LEMON/...`
+- EEG files in `data/eeg/EEG_Preprocessed_BIDS_ID`
+- metadata and cognitive tables in `data/phenotype/Behavioural_Data_MPILMBB_LEMON/...`
 
 The EEG files are paired by subject:
 
 - `*_EO.set`
 - `*_EC.set`
 
-The target tables provide four regression targets used by the current pipeline:
+The current regression targets are:
 
 - `working_memory`
 - `attention`
 - `executive_function`
 - `intelligence`
 
-The pipeline also adds two simple metadata fields:
+The pipeline also adds:
 
 - `age`
 - `gender`
 
 A subject is only used if the repo can find:
 
-1. an EO EEG file
-2. an EC EEG file
+1. an EO file
+2. an EC file
 3. metadata
 4. all four target values
 
 ## What EO and EC Mean
 
-EO means "eyes open."
+EO means eyes open.
 
-EC means "eyes closed."
+EC means eyes closed.
 
-Both are resting-state recordings, so the subject is not doing an active task. The idea is to capture baseline brain activity under two slightly different conditions.
-
-This matters because eyes-open and eyes-closed EEG often look different, especially in the alpha range. The project keeps them separate so the model can learn from that contrast instead of averaging it away too early.
+Both are resting-state recordings, but they are still meaningfully different conditions. In EEG, alpha activity often changes between EO and EC. This repo keeps EO and EC separate so the model can learn from that contrast instead of averaging it away too early.
 
 ## Where the Main Logic Lives
 
 These files matter most:
 
 - `src/train_lemon_multitarget.py`
-  Builds the base dataset from EEG, metadata, and targets.
+  Builds the base subject-level dataset from EEG, metadata, and targets.
 - `src/feature_variants.py`
   Creates alternate feature sets from the base EO/EC table.
 - `src/split_manifest.py`
-  Creates and validates fixed train/test fold assignments by subject ID.
+  Creates and validates fixed subject-level train/test folds.
 - `src/benchmark_v1.py`
-  Runs the benchmark and writes result files.
+  Runs the benchmark and writes the main result files.
 - `run_resume_benchmark.py`
-  Thin wrapper that launches the smallest, interview-friendly benchmark run.
+  Thin wrapper for the simplest interview-friendly run.
 
-Secondary files:
+Secondary but useful files:
 
 - `src/predict_my_report.py`
-  Demo script for exploratory report-style input.
+  Exploratory sparse-input demo script.
 - `backend/app/`
   FastAPI demo layer.
 - `frontend/app/`
@@ -90,42 +116,33 @@ Secondary files:
 
 The preprocessing in this repo is intentionally simple.
 
-For each EEG file, the code:
+For each EEG file, the training code:
 
 1. reads the EEGLAB `.set` file with MNE
 2. keeps EEG channels only
-3. excludes bad channels if marked
+3. excludes bad channels if they were marked
 4. applies average reference
+5. estimates the spectrum from 1 to 30 Hz with Welch PSD
+6. integrates power inside named frequency bands
 
-That is enough for the current spectral feature pipeline without turning the project into a large signal-processing system.
+This is enough to support a clean, explainable spectral benchmark without turning the project into a very large signal-processing system.
 
 ## What "Welch PSD Bandpower Features" Means
 
-This phrase sounds technical, but the idea is simple.
+This sounds technical, but the idea is simple.
 
-The model cannot learn directly from a long raw EEG time series very easily, so the code summarizes each channel into a smaller set of numbers.
+The model does not work directly on a long raw EEG time series. Instead, the code summarizes each channel into a smaller set of numbers.
 
 It does that in two steps:
 
-1. Estimate how much signal energy exists at different frequencies.
-2. Add up that energy inside named frequency ranges.
-
-Welch PSD:
-
-- "PSD" means power spectral density.
-- In plain language, it estimates how strong different rhythms are in the EEG.
-- "Welch" is just the averaging method used to make that estimate more stable.
-
-Bandpower:
-
-- Once the spectrum is estimated, the code sums power inside frequency bands.
-- That creates features like delta, theta, alpha, and beta power for each channel.
+1. estimate how much signal power exists at each frequency
+2. add up that power inside named ranges such as alpha or beta
 
 Plain-English version:
 
-"For every EEG channel, the code measures how much activity shows up in several common frequency ranges."
+"For each EEG channel, the code measures how much activity appears in several common frequency ranges."
 
-The current bands are:
+Current bands:
 
 - delta: 1-4 Hz
 - theta: 4-8 Hz
@@ -136,76 +153,108 @@ The current bands are:
 - beta: 12-30 Hz
 - high beta: 20-30 Hz
 
-Each feature name also keeps track of whether it came from EO or EC.
+## One Worked Feature Example
 
-## How the Base Dataset Is Built
+Take the feature name `f3_alpha_eo`.
 
-For each usable subject, the training script:
+Here is what it means:
 
-1. computes EO bandpower features
-2. computes EC bandpower features
-3. appends `age` and `gender`
-4. stores the four target values
+1. `f3`
+   Use the F3 EEG channel.
+2. `alpha`
+   Look only at the 8-12 Hz alpha band.
+3. `eo`
+   Take that value from the eyes-open recording.
 
-That produces one row per subject.
+So the full story is:
 
-So the final table is not a raw EEG table. It is a subject-level machine learning table.
+`sub-032_EO.set` -> preprocess EEG -> estimate Welch PSD for F3 -> integrate power from 8 to 12 Hz -> save the result as `f3_alpha_eo`
 
-## What the Feature Variants Mean
+That one number becomes one column in the subject-level ML table.
 
-The repo supports multiple feature variants, but the main public set is intentionally small.
+## How Feature Naming Works
+
+The base naming pattern is:
+
+`channel_band_state`
+
+Examples:
+
+- `f3_alpha_eo`
+- `o1_theta_ec`
+- `cz_beta_eo`
+
+Derived features follow the same logic but add a suffix that explains what changed.
+
+Examples:
+
+- `f3_alpha_diff`
+  EO minus EC for that base feature
+- `region_frontal_alpha_eo`
+  frontal-region mean alpha feature for EO
+
+This naming scheme is useful in interviews because the feature columns are readable without needing a decoder.
+
+## What the Main Feature Variants Mean
+
+The repo supports many variants, but the public default set is intentionally small.
 
 ### `eo_ec_concat`
 
-This is the clean baseline.
-
-It keeps EO features and EC features as separate columns in the same row.
+Use EO features and EC features side by side.
 
 Meaning:
 
-"Use both resting-state conditions, but do not mix them together yet."
+"Give the model both resting-state conditions, but keep them separate."
 
 ### `eo_ec_concat_plus_regions`
 
-This starts from the baseline above and adds regional averages such as frontal or occipital summaries.
+Start from the baseline above and add regional averages.
 
 Meaning:
 
-"Keep the channel-level detail, but also give the model a simpler region-level view."
+"Keep channel detail, but also give the model simpler region-level summaries."
 
 ### `eo_ec_concat_plus_diff_plus_regions`
 
-This adds EO-minus-EC difference features on top of the baseline and regional summaries.
+Add EO-minus-EC difference features on top of the baseline and regional summaries.
 
 Meaning:
 
-"Let the model see the raw EO values, the raw EC values, and the explicit change between them."
+"Let the model see the raw EO values, the raw EC values, and the explicit contrast between them."
 
-This is the easiest "best current variant" to explain in interviews because it is still interpretable.
+This is the easiest best-current variant to explain because it stays interpretable.
 
-### Advanced variants
+### Exploratory variants
 
-The repo also keeps some more exploratory variants, such as log-ratio, ratio-based, and asymmetry-based features.
+The repo also keeps narrower or more handcrafted variants such as:
 
-These still work, but they are not part of the main story. They are better described as optional research extensions.
+- `eo_only`
+- `ec_only`
+- `eo_ec_diff`
+- `eo_ec_logratio`
+- ratio-based features
+- asymmetry-based features
+
+These still work, but they are better described as exploratory comparisons rather than the main benchmark story.
 
 ## What the Benchmark Script Does
 
 `src/benchmark_v1.py` is the main benchmark runner.
 
-Its job is to make model comparisons reproducible.
+Its job is to make feature and model comparisons reproducible.
 
 It does the following:
 
-1. loads the subject-level dataset
-2. checks that the expected target columns are still the ones being used
-3. loads or creates fixed subject-level folds
+1. builds the subject-level dataset
+2. checks that the expected target columns are the ones actually being used
+3. loads or creates a fixed split manifest
 4. builds the requested feature variant
-5. trains the requested model on each fold
+5. trains each requested model on each fold
 6. scales targets using the train fold only
 7. converts predictions back to raw target space
 8. computes metrics in raw target space
-9. writes run metadata and CSV outputs
+9. writes run metadata and CSV summaries
 
 The default benchmark story is intentionally small:
 
@@ -221,25 +270,13 @@ The default benchmark story is intentionally small:
 
 The repo saves subject-level fold assignments in `processed/splits/benchmark_v1_splits.csv`.
 
-This helps in two ways:
+This matters because:
 
-1. the same person never appears in both train and test within a fold
-2. future runs can reuse the same folds, which makes comparisons fairer
+1. the same person never appears in both train and test within one fold
+2. future runs can reuse the exact same folds
+3. model and feature changes can be compared fairly
 
-Without fixed splits, it would be harder to tell whether a result changed because of a real improvement or just a different random partition.
-
-## What Models Are Compared
-
-The simplified default suite is:
-
-- `dummy`
-  A floor. It tells you what happens if you predict something trivial like the mean.
-- `ridge`
-  A simple linear baseline.
-- `random_forest`
-  A stronger nonlinear tabular baseline.
-
-Optional exploratory models still exist in `benchmark_v1.py`, including `elasticnet` and `hist_gb`.
+Without fixed splits, a result change could come from a different random partition instead of a real modeling difference.
 
 ## What Gets Saved
 
@@ -258,14 +295,14 @@ These are mainly for the trained-model and demo paths.
 
 ### Benchmark artifacts
 
-These come from `benchmark_v1.py`:
+These come from `src/benchmark_v1.py`:
 
 - `results/benchmark_v1/<run_id>/metadata.json`
 - `results/benchmark_v1/<run_id>/split_summary.csv`
 - `results/benchmark_v1/<run_id>/fold_results.csv`
 - `results/benchmark_v1/<run_id>/summary_results.csv`
 
-These are the most important files for explaining benchmark runs.
+These are the most important files for understanding the benchmark itself.
 
 ## What the Saved Results Currently Say
 
@@ -274,29 +311,41 @@ The strongest saved setup is:
 - model: `random_forest`
 - feature variant: `eo_ec_concat_plus_diff_plus_regions`
 
-Current saved cross-validation results are modest:
+Current saved mean CV R2 values are:
 
-- `attention`: mean R2 about `0.07`
-- `executive_function`: mean R2 about `0.13`
-- `working_memory`: near `0`
-- `intelligence`: negative R2
+- `attention`: about `0.07`
+- `executive_function`: about `0.13`
+- `working_memory`: about `-0.02`
+- `intelligence`: about `-0.10`
 
-So the honest conclusion is:
+The clean takeaway is:
 
-"There is some signal for attention and executive function, but the current feature set is weak for working memory and intelligence."
+"There is modest but encouraging signal for attention and executive function, while working memory and intelligence are still more limited in the current setup."
 
-## How to Study the Repo in Order
+That is why the repo is best discussed as a benchmark-first project and reproducible comparison framework, not as a general cognitive prediction system.
 
-If you want to understand the code top-to-bottom, read it in this order:
+## Good Reading Order
+
+If you want to understand the repo top to bottom, read it in this order:
 
 1. `README.md`
 2. `src/train_lemon_multitarget.py`
-3. `feature_variants.py`
-4. `split_manifest.py`
-5. `benchmark_v1.py`
+3. `src/feature_variants.py`
+4. `src/split_manifest.py`
+5. `src/benchmark_v1.py`
 6. `run_resume_benchmark.py`
-7. `src/predict_my_report.py`
-8. `backend/app/`
-9. `frontend/app/`
+7. `docs/preprocessing_cheatsheet.md`
+8. `docs/feature_variant_cheatsheet.md`
+9. `docs/metrics_and_model_reading_guide.md`
+10. `src/predict_my_report.py`
+11. `backend/app/`
+12. `frontend/app/`
 
-That order keeps the core ML story first and the optional demo pieces second.
+See also:
+
+- `docs/README.md`
+- `docs/preprocessing_cheatsheet.md`
+- `docs/feature_variant_cheatsheet.md`
+- `docs/ml_concepts_for_this_project.md`
+- `docs/metrics_and_model_reading_guide.md`
+- `docs/file_by_file_code_map.md`

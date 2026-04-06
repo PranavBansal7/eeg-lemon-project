@@ -1,4 +1,9 @@
-"""Create, validate, and summarize subject-level benchmark split manifests."""
+"""Create, validate, and summarize subject-level benchmark split manifests.
+
+A split manifest is a saved table with one row per subject per fold. Freezing
+those train/test assignments once makes later model and feature comparisons
+fairer, because every rerun uses the same subject-level partitions.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +18,7 @@ VALID_SPLITS = {"train", "test"}
 
 
 def generate_split_manifest(subject_ids: Sequence[str], n_splits: int, random_state: int) -> pd.DataFrame:
+    """Create a reusable subject-level train/test assignment table."""
     unique_ids = sorted({str(subject_id).strip() for subject_id in subject_ids if str(subject_id).strip()})
     if len(unique_ids) < 2:
         raise ValueError("Need at least 2 unique subject IDs to create KFold splits.")
@@ -28,6 +34,8 @@ def generate_split_manifest(subject_ids: Sequence[str], n_splits: int, random_st
         train_ids = {unique_ids[i] for i in train_idx}
         test_ids = {unique_ids[i] for i in test_idx}
 
+        # Save every subject's role in every fold so later runs can reuse the
+        # exact same partitions instead of relying on a fresh random split.
         for subject_id in unique_ids:
             split = "test" if subject_id in test_ids else "train"
             rows.append({"id": subject_id, "fold": fold_idx, "split": split})
@@ -37,11 +45,13 @@ def generate_split_manifest(subject_ids: Sequence[str], n_splits: int, random_st
 
 
 def save_split_manifest(manifest: pd.DataFrame, output_path: Path) -> None:
+    """Persist the manifest so future benchmark runs can reuse it unchanged."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     manifest.to_csv(output_path, index=False)
 
 
 def load_split_manifest(path: Path) -> pd.DataFrame:
+    """Load a saved manifest and coerce its columns into the expected types."""
     if not path.exists():
         raise FileNotFoundError(f"Split manifest not found: {path}")
 
@@ -63,6 +73,7 @@ def load_split_manifest(path: Path) -> pd.DataFrame:
 
 
 def validate_split_manifest(manifest: pd.DataFrame, dataset_subject_ids: Sequence[str]) -> None:
+    """Check that the saved manifest still matches the current dataset IDs."""
     data_ids: Set[str] = {str(subject_id).strip() for subject_id in dataset_subject_ids if str(subject_id).strip()}
     manifest_ids: Set[str] = set(manifest["id"].tolist())
 
@@ -93,6 +104,7 @@ def validate_split_manifest(manifest: pd.DataFrame, dataset_subject_ids: Sequenc
 
 
 def fold_counts(manifest: pd.DataFrame) -> pd.DataFrame:
+    """Return a compact per-fold train/test count table for logging and CSV output."""
     counts = (
         manifest.groupby(["fold", "split"], as_index=False)
         .size()

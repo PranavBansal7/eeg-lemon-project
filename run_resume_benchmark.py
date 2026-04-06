@@ -9,6 +9,9 @@ This wrapper keeps the CLI intentionally small and always delegates to
 
 That gives new users one obvious command to run while preserving the same
 benchmark outputs, metadata, and split-handling behavior as `src/benchmark_v1.py`.
+
+Example:
+    python run_resume_benchmark.py
 """
 
 from __future__ import annotations
@@ -70,8 +73,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     from src import benchmark_v1
 
     print(
-        "[INFO] Resume benchmark entrypoint: running the recommended baseline suite "
-        "from src/benchmark_v1.py."
+        "[INFO] Resume benchmark entrypoint: running the recommended benchmark-first "
+        "suite from src/benchmark_v1.py."
     )
     benchmark_v1.main(build_benchmark_argv(args))
 

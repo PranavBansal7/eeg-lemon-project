@@ -19,8 +19,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODEL_PATH = PROJECT_ROOT / "models" / "rf_model.pkl"
 FEATURE_COLUMNS_PATH = PROJECT_ROOT / "processed" / "feature_columns.json"
 
-PERSON_AGE = 22.0
-PERSON_GENDER = 1.0  # male
+DEMO_AGE = 22.0
+DEMO_GENDER = 1.0  # male
 
 TARGET_NAMES = [
     "working_memory",
@@ -40,11 +40,11 @@ BANDS = [
     "high_beta",
 ]
 
-# ============================== REPORT_FEATURES ===============================
+# ============================ DEMO_REPORT_FEATURES =============================
 # Example anchor values for the exploratory report-style demo.
 # Structure:
-# REPORT_FEATURES[channel][state][band]
-REPORT_FEATURES = {
+# DEMO_REPORT_FEATURES[channel][state][band]
+DEMO_REPORT_FEATURES = {
     "cz": {
         "eo": {
             "delta": 26.0,
@@ -159,11 +159,12 @@ REPORT_FEATURES = {
 # ============================================================================
 
 
-def print_exploratory_warning() -> None:
+def print_demo_extension_note() -> None:
     print("\n" + "=" * 100)
-    print("WARNING: EXPLORATORY REPORT-STYLE DEMO ONLY")
-    print("This output is NOT clinically valid, NOT diagnostic, and must NOT be used for treatment decisions.")
-    print("It is an interview-secondary extension for experimenting with sparse or report-like inputs.")
+    print("NOTE: OPTIONAL REPORT-STYLE DEMO EXTENSION")
+    print("This script shows how sparse or report-like anchor values can be expanded into the saved model schema.")
+    print("It is useful for exploration and interview discussion, but it is not the central benchmark path.")
+    print("Outputs are not clinical and should not be used for diagnosis or treatment decisions.")
     print("=" * 100 + "\n")
 
 
@@ -361,16 +362,16 @@ def print_predictions(predictions, target_names: List[str]) -> None:
 
 
 def main() -> None:
-    print_exploratory_warning()
+    print_demo_extension_note()
 
     model = load_model(MODEL_PATH)
     feature_columns = load_feature_schema(FEATURE_COLUMNS_PATH)
 
     input_df = build_final_input_dataframe(
         feature_columns=feature_columns,
-        report_features=REPORT_FEATURES,
-        age=PERSON_AGE,
-        gender=PERSON_GENDER,
+        report_features=DEMO_REPORT_FEATURES,
+        age=DEMO_AGE,
+        gender=DEMO_GENDER,
     )
 
     predictions = model.predict(input_df)

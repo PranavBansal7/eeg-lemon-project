@@ -2,6 +2,9 @@
 
 import { ChangeEvent, FormEvent, useState } from "react";
 
+// By default the browser talks to `/api`, which Next.js rewrites to the backend.
+// `NEXT_PUBLIC_API_BASE_URL` is still available when we want the client to call
+// a direct backend URL instead.
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
 
 const CONDITIONS = ["eo", "ec"] as const;
@@ -66,6 +69,43 @@ type ResultState =
       message: string;
       notes: string;
     };
+
+type FormSubmitHandler = (event: FormEvent<HTMLFormElement>) => Promise<void>;
+
+type HeroCardProps = {
+  apiBase: string;
+};
+
+type WorkflowGridProps = {
+  activeWorkflow: WorkflowKind | null;
+  onCsvSubmit: FormSubmitHandler;
+  onPdfSubmit: FormSubmitHandler;
+  onDemoClick: () => Promise<void>;
+  onCsvFileSelect: (file: File | null) => void;
+  onPdfFileSelect: (file: File | null) => void;
+};
+
+type OptionalManualEntryDemoProps = {
+  age: string;
+  gender: string;
+  manualInputs: ManualInputMatrix;
+  activeWorkflow: WorkflowKind | null;
+  onAgeChange: (value: string) => void;
+  onGenderChange: (value: string) => void;
+  onManualInputChange: (
+    condition: Condition,
+    electrode: Electrode,
+    band: Band,
+    value: string
+  ) => void;
+  onSubmit: FormSubmitHandler;
+};
+
+type ResultsPanelProps = {
+  activeWorkflow: WorkflowKind | null;
+  error: string | null;
+  result: ResultState | null;
+};
 
 function toLabel(text: string): string {
   return text
@@ -170,6 +210,311 @@ async function readErrorMessage(response: Response): Promise<string> {
   }
 
   return "Request failed with status " + response.status + ".";
+}
+
+function HeroCard(props: HeroCardProps) {
+  return (
+    <section className="card hero-card">
+      <p className="eyebrow">NeuroScope</p>
+      <h1>NeuroScope Demo UI for Saved EEG Benchmark Artifacts</h1>
+      <p className="subtitle">
+        Lightweight demo interface for trying CSV, manual, and built-in example
+        prediction workflows on top of the saved backend artifacts.
+      </p>
+      <p className="disclaimer">
+        This UI is an interview-secondary demo layer. The recommended browser path
+        uses <code>{props.apiBase}</code>, while the benchmark remains the main
+        validated contribution.
+      </p>
+    </section>
+  );
+}
+
+function WorkflowGrid(props: WorkflowGridProps) {
+  return (
+    <section className="workflow-grid">
+      <article className="card workflow-card recommended-card">
+        <div className="section-head">
+          <h2>Upload CSV</h2>
+          <span className="badge">Recommended</span>
+        </div>
+        <p className="section-note">
+          Best for demonstrating the batch prediction path when you already have
+          anchor EEG features in tabular format. A ready-to-test sample file lives
+          at <code>my_data/sample_anchor_input.csv</code>.
+        </p>
+        <form onSubmit={props.onCsvSubmit} className="stack-gap">
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={function (event: ChangeEvent<HTMLInputElement>) {
+              props.onCsvFileSelect(
+                event.target.files && event.target.files[0]
+                  ? event.target.files[0]
+                  : null
+              );
+            }}
+          />
+          <button
+            type="submit"
+            disabled={props.activeWorkflow !== null}
+            className="btn btn-primary"
+          >
+            {props.activeWorkflow === "csv" ? "Uploading CSV..." : "Predict from CSV"}
+          </button>
+        </form>
+      </article>
+
+      <article className="card workflow-card">
+        <div className="section-head">
+          <h2>Upload EEG Report PDF</h2>
+          <span className="badge soft">Future Extension</span>
+        </div>
+        <p className="section-note">
+          Exploratory extension for future report parsing. The current implementation
+          returns a structured acknowledgement response rather than a model prediction.
+        </p>
+        <form onSubmit={props.onPdfSubmit} className="stack-gap">
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={function (event: ChangeEvent<HTMLInputElement>) {
+              props.onPdfFileSelect(
+                event.target.files && event.target.files[0]
+                  ? event.target.files[0]
+                  : null
+              );
+            }}
+          />
+          <button
+            type="submit"
+            disabled={props.activeWorkflow !== null}
+            className="btn btn-secondary"
+          >
+            {props.activeWorkflow === "pdf" ? "Uploading PDF..." : "Try PDF Extension"}
+          </button>
+        </form>
+      </article>
+
+      <article className="card workflow-card">
+        <div className="section-head">
+          <h2>Try Demo Example</h2>
+        </div>
+        <p className="section-note">
+          Quick way to show the API and UI path using built-in anchor EEG values
+          from the backend.
+        </p>
+        <button
+          type="button"
+          disabled={props.activeWorkflow !== null}
+          className="btn btn-secondary"
+          onClick={props.onDemoClick}
+        >
+          {props.activeWorkflow === "demo" ? "Running Demo..." : "Run Demo Prediction"}
+        </button>
+      </article>
+    </section>
+  );
+}
+
+function OptionalManualEntryDemo(props: OptionalManualEntryDemoProps) {
+  return (
+    <details className="card advanced-card">
+      <summary>Optional Manual Entry Demo (EO + EC)</summary>
+      <p className="section-note advanced-note">
+        Optional interview-secondary workflow for full control over anchor values.
+        Inputs are grouped by condition and electrode.
+      </p>
+      <form onSubmit={props.onSubmit} className="stack-gap large-gap">
+        <div className="manual-meta-grid">
+          <label className="field">
+            <span>Age</span>
+            <input
+              type="number"
+              min="1"
+              max="120"
+              step="1"
+              value={props.age}
+              onChange={function (event: ChangeEvent<HTMLInputElement>) {
+                props.onAgeChange(event.target.value);
+              }}
+            />
+          </label>
+
+          <label className="field">
+            <span>Gender</span>
+            <select
+              value={props.gender}
+              onChange={function (event: ChangeEvent<HTMLSelectElement>) {
+                props.onGenderChange(event.target.value);
+              }}
+            >
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="1">Numeric 1</option>
+              <option value="0">Numeric 0</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="condition-wrapper">
+          {CONDITIONS.map(function (condition) {
+            return (
+              <section key={condition} className="condition-block">
+                <h3>{condition === "eo" ? "Eyes Open (EO)" : "Eyes Closed (EC)"}</h3>
+                <div className="electrode-grid">
+                  {ELECTRODES.map(function (electrode) {
+                    return (
+                      <fieldset key={electrode} className="electrode-card">
+                        <legend>{electrode.toUpperCase()}</legend>
+                        <div className="band-grid">
+                          {BANDS.map(function (band) {
+                            return (
+                              <label key={band} className="field compact">
+                                <span>{toLabel(band)}</span>
+                                <input
+                                  type="number"
+                                  step="0.001"
+                                  value={props.manualInputs[condition][electrode][band]}
+                                  onChange={function (event: ChangeEvent<HTMLInputElement>) {
+                                    props.onManualInputChange(
+                                      condition,
+                                      electrode,
+                                      band,
+                                      event.target.value
+                                    );
+                                  }}
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </fieldset>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+
+        <button
+          type="submit"
+          disabled={props.activeWorkflow !== null}
+          className="btn btn-secondary"
+        >
+          {props.activeWorkflow === "manual"
+            ? "Submitting Manual Values..."
+            : "Predict from Manual Entry"}
+        </button>
+      </form>
+    </details>
+  );
+}
+
+function MetricsGrid(props: { prediction: PredictionMetrics }) {
+  return (
+    <div className="metrics-grid">
+      {TARGET_KEYS.map(function (key) {
+        return (
+          <article key={key} className="metric-card">
+            <p className="metric-label">{toLabel(key)}</p>
+            <p className="metric-value">{formatMetric(props.prediction[key])}</p>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function BatchResultsTable(props: { rows: CsvPredictionItem[] }) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Row</th>
+            {TARGET_KEYS.map(function (key) {
+              return <th key={key}>{toLabel(key)}</th>;
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {props.rows.map(function (item) {
+            return (
+              <tr key={item.row_index}>
+                <td>{item.row_index}</td>
+                {TARGET_KEYS.map(function (key) {
+                  return <td key={key}>{formatMetric(item.predictions[key])}</td>;
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ResultsPanel(props: ResultsPanelProps) {
+  return (
+    <section className="card results-card">
+      <div className="section-head">
+        <h2>Results</h2>
+      </div>
+
+      {props.activeWorkflow !== null && (
+        <div className="status loading-state">
+          <span className="dot-loader" aria-hidden="true" />
+          <p>Running {props.activeWorkflow.toUpperCase()} workflow...</p>
+        </div>
+      )}
+
+      {props.error && (
+        <div className="status error-state">
+          <p>{props.error}</p>
+        </div>
+      )}
+
+      {!props.activeWorkflow && !props.error && !props.result && (
+        <p className="empty-state">
+          No prediction yet. Start with the recommended CSV demo workflow or run
+          the built-in demo.
+        </p>
+      )}
+
+      {!props.activeWorkflow &&
+        !props.error &&
+        props.result &&
+        props.result.mode === "single" && (
+          <div className="result-block">
+            <h3>{props.result.title}</h3>
+            <MetricsGrid prediction={props.result.prediction} />
+          </div>
+        )}
+
+      {!props.activeWorkflow &&
+        !props.error &&
+        props.result &&
+        props.result.mode === "batch" && (
+          <div className="result-block">
+            <h3>{props.result.title}</h3>
+            <BatchResultsTable rows={props.result.rows} />
+          </div>
+        )}
+
+      {!props.activeWorkflow &&
+        !props.error &&
+        props.result &&
+        props.result.mode === "info" && (
+          <div className="result-block info-block">
+            <h3>{props.result.title}</h3>
+            <p>{props.result.message}</p>
+            <p>{props.result.notes}</p>
+          </div>
+        )}
+    </section>
+  );
 }
 
 export default function HomePage() {
@@ -331,7 +676,9 @@ export default function HomePage() {
     }
   }
 
-  async function handleManualSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+  async function handleManualSubmit(
+    event: FormEvent<HTMLFormElement>
+  ): Promise<void> {
     event.preventDefault();
 
     const numericAge = Number(age);
@@ -394,246 +741,30 @@ export default function HomePage() {
 
   return (
     <main className="page-shell">
-      <section className="card hero-card">
-        <p className="eyebrow">NeuroScope</p>
-        <h1>NeuroScope Demo UI for Saved EEG Benchmark Artifacts</h1>
-        <p className="subtitle">
-          Lightweight demo interface for trying manual, CSV, and built-in example
-          prediction workflows on top of the trained backend artifacts.
-        </p>
-        <p className="disclaimer">
-          Disclaimer: This UI is an interview-secondary demo layer. Outputs are
-          exploratory and are not clinically validated or intended for diagnosis.
-        </p>
-      </section>
-
-      <section className="workflow-grid">
-        <article className="card workflow-card recommended-card">
-          <div className="section-head">
-            <h2>Upload CSV</h2>
-            <span className="badge">Recommended</span>
-          </div>
-          <p className="section-note">
-            Best for demonstrating the batch prediction path when you already have anchor EEG features in tabular format.
-          </p>
-          <form onSubmit={handleCsvSubmit} className="stack-gap">
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              onChange={function (event: ChangeEvent<HTMLInputElement>) {
-                setCsvFile(event.target.files && event.target.files[0] ? event.target.files[0] : null);
-              }}
-            />
-            <button type="submit" disabled={activeWorkflow !== null} className="btn btn-primary">
-              {activeWorkflow === "csv" ? "Uploading CSV..." : "Predict from CSV"}
-            </button>
-          </form>
-        </article>
-
-        <article className="card workflow-card">
-          <div className="section-head">
-            <h2>Upload EEG Report PDF</h2>
-            <span className="badge soft">Experimental</span>
-          </div>
-          <p className="section-note">
-            Exploratory extension for future report parsing. The current implementation returns a structured placeholder response rather than a model prediction.
-          </p>
-          <form onSubmit={handlePdfSubmit} className="stack-gap">
-            <input
-              type="file"
-              accept="application/pdf,.pdf"
-              onChange={function (event: ChangeEvent<HTMLInputElement>) {
-                setPdfFile(event.target.files && event.target.files[0] ? event.target.files[0] : null);
-              }}
-            />
-            <button type="submit" disabled={activeWorkflow !== null} className="btn btn-secondary">
-              {activeWorkflow === "pdf" ? "Uploading PDF..." : "Try PDF Extension"}
-            </button>
-          </form>
-        </article>
-
-        <article className="card workflow-card">
-          <div className="section-head">
-            <h2>Try Demo Example</h2>
-          </div>
-          <p className="section-note">
-            Quick way to show the API and UI path using built-in anchor EEG values from the backend.
-          </p>
-          <button
-            type="button"
-            disabled={activeWorkflow !== null}
-            className="btn btn-secondary"
-            onClick={handleDemoClick}
-          >
-            {activeWorkflow === "demo" ? "Running Demo..." : "Run Demo Prediction"}
-          </button>
-        </article>
-      </section>
-
-      <details className="card advanced-card">
-        <summary>Advanced: Manual Entry Demo (EO + EC)</summary>
-        <p className="section-note advanced-note">
-          Interview-secondary workflow for full control over anchor values. Inputs are grouped by condition and electrode.
-        </p>
-        <form onSubmit={handleManualSubmit} className="stack-gap large-gap">
-          <div className="manual-meta-grid">
-            <label className="field">
-              <span>Age</span>
-              <input
-                type="number"
-                min="1"
-                max="120"
-                step="1"
-                value={age}
-                onChange={function (event: ChangeEvent<HTMLInputElement>) {
-                  setAge(event.target.value);
-                }}
-              />
-            </label>
-
-            <label className="field">
-              <span>Gender</span>
-              <select
-                value={gender}
-                onChange={function (event: ChangeEvent<HTMLSelectElement>) {
-                  setGender(event.target.value);
-                }}
-              >
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-                <option value="1">Numeric 1</option>
-                <option value="0">Numeric 0</option>
-              </select>
-            </label>
-          </div>
-
-          <div className="condition-wrapper">
-            {CONDITIONS.map(function (condition) {
-              return (
-                <section key={condition} className="condition-block">
-                  <h3>{condition === "eo" ? "Eyes Open (EO)" : "Eyes Closed (EC)"}</h3>
-                  <div className="electrode-grid">
-                    {ELECTRODES.map(function (electrode) {
-                      return (
-                        <fieldset key={electrode} className="electrode-card">
-                          <legend>{electrode.toUpperCase()}</legend>
-                          <div className="band-grid">
-                            {BANDS.map(function (band) {
-                              return (
-                                <label key={band} className="field compact">
-                                  <span>{toLabel(band)}</span>
-                                  <input
-                                    type="number"
-                                    step="0.001"
-                                    value={manualInputs[condition][electrode][band]}
-                                    onChange={function (event: ChangeEvent<HTMLInputElement>) {
-                                      updateManualInput(
-                                        condition,
-                                        electrode,
-                                        band,
-                                        event.target.value
-                                      );
-                                    }}
-                                  />
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </fieldset>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-
-          <button type="submit" disabled={activeWorkflow !== null} className="btn btn-secondary">
-            {activeWorkflow === "manual" ? "Submitting Manual Values..." : "Predict from Manual Entry"}
-          </button>
-        </form>
-      </details>
-
-      <section className="card results-card">
-        <div className="section-head">
-          <h2>Results</h2>
-        </div>
-
-        {activeWorkflow !== null && (
-          <div className="status loading-state">
-            <span className="dot-loader" aria-hidden="true" />
-            <p>Running {activeWorkflow.toUpperCase()} workflow...</p>
-          </div>
-        )}
-
-        {error && (
-          <div className="status error-state">
-            <p>{error}</p>
-          </div>
-        )}
-
-        {!activeWorkflow && !error && !result && (
-          <p className="empty-state">
-            No prediction yet. Start with the recommended CSV demo workflow or run the built-in demo.
-          </p>
-        )}
-
-        {!activeWorkflow && !error && result && result.mode === "single" && (
-          <div className="result-block">
-            <h3>{result.title}</h3>
-            <div className="metrics-grid">
-              {TARGET_KEYS.map(function (key) {
-                return (
-                  <article key={key} className="metric-card">
-                    <p className="metric-label">{toLabel(key)}</p>
-                    <p className="metric-value">{formatMetric(result.prediction[key])}</p>
-                  </article>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {!activeWorkflow && !error && result && result.mode === "batch" && (
-          <div className="result-block">
-            <h3>{result.title}</h3>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Row</th>
-                    {TARGET_KEYS.map(function (key) {
-                      return <th key={key}>{toLabel(key)}</th>;
-                    })}
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.rows.map(function (item) {
-                    return (
-                      <tr key={item.row_index}>
-                        <td>{item.row_index}</td>
-                        {TARGET_KEYS.map(function (key) {
-                          return (
-                            <td key={key}>{formatMetric(item.predictions[key])}</td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {!activeWorkflow && !error && result && result.mode === "info" && (
-          <div className="result-block info-block">
-            <h3>{result.title}</h3>
-            <p>{result.message}</p>
-            <p>{result.notes}</p>
-          </div>
-        )}
-      </section>
+      <HeroCard apiBase={API_BASE} />
+      <WorkflowGrid
+        activeWorkflow={activeWorkflow}
+        onCsvSubmit={handleCsvSubmit}
+        onPdfSubmit={handlePdfSubmit}
+        onDemoClick={handleDemoClick}
+        onCsvFileSelect={setCsvFile}
+        onPdfFileSelect={setPdfFile}
+      />
+      <OptionalManualEntryDemo
+        age={age}
+        gender={gender}
+        manualInputs={manualInputs}
+        activeWorkflow={activeWorkflow}
+        onAgeChange={setAge}
+        onGenderChange={setGender}
+        onManualInputChange={updateManualInput}
+        onSubmit={handleManualSubmit}
+      />
+      <ResultsPanel
+        activeWorkflow={activeWorkflow}
+        error={error}
+        result={result}
+      />
     </main>
   );
 }
