@@ -1,3 +1,10 @@
+"""Exploratory report-style inference demo for sparse EEG anchor inputs.
+
+This script is included as an optional extension around the saved model artifacts.
+It is useful for experimentation and interview discussion, but it is not the
+central evaluated benchmark path in this repo.
+"""
+
 from __future__ import annotations
 
 import json
@@ -34,7 +41,7 @@ BANDS = [
 ]
 
 # ============================== REPORT_FEATURES ===============================
-# Report-adapted EEG anchors for known channels.
+# Example anchor values for the exploratory report-style demo.
 # Structure:
 # REPORT_FEATURES[channel][state][band]
 REPORT_FEATURES = {
@@ -154,9 +161,9 @@ REPORT_FEATURES = {
 
 def print_exploratory_warning() -> None:
     print("\n" + "=" * 100)
-    print("WARNING: EXPLORATORY PERSONAL PREDICTION ONLY")
+    print("WARNING: EXPLORATORY REPORT-STYLE DEMO ONLY")
     print("This output is NOT clinically valid, NOT diagnostic, and must NOT be used for treatment decisions.")
-    print("It is a report-adapted model estimate for technical exploration only.")
+    print("It is an interview-secondary extension for experimenting with sparse or report-like inputs.")
     print("=" * 100 + "\n")
 
 

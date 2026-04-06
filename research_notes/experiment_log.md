@@ -83,5 +83,4 @@ What question was I trying to answer?
 
 ### Command run
 ```bash
-python3 benchmark_v1.py ...
-
+python3 -m src.benchmark_v1 ...

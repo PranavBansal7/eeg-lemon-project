@@ -2,7 +2,7 @@
 
 ## NeuroScope: EEG-Based Cognitive Prediction from Resting-State Signals
 
-A complete step-by-step study guide for understanding this project end-to-end, including machine learning, backend, frontend, and interview preparation.
+A complete step-by-step study guide for understanding this project, with the main emphasis on the ML benchmark and the web layer treated as a lightweight demo extension.
 
 ---
 
@@ -25,7 +25,7 @@ NeuroScope predicts four cognitive outcomes from resting-state EEG:
 3. executive_function
 4. intelligence
 
-It does this by extracting EO and EC bandpower features from EEGLAB `.set` files, adding metadata (`age`, `gender`), training a multi-target ML model (`RandomForestRegressor` inside `MultiOutputRegressor`), and exposing predictions through a FastAPI backend and Next.js frontend.
+It does this by extracting EO and EC bandpower features from EEGLAB `.set` files, adding metadata (`age`, `gender`), training a multi-target ML model (`RandomForestRegressor` inside `MultiOutputRegressor`), and optionally exposing saved artifacts through a FastAPI backend and Next.js frontend demo layer.
 
 ---
 
@@ -36,11 +36,11 @@ It does this by extracting EO and EC bandpower features from EEGLAB `.set` files
 3. Model is trained and saved in `models/rf_model.pkl`.
 4. Feature schema is saved in `processed/feature_columns.json`.
 5. Backend loads these artifacts once at startup.
-6. Frontend calls backend endpoints for manual, CSV, PDF placeholder, and demo predictions.
+6. The optional frontend calls backend endpoints for manual, CSV, placeholder PDF, and demo workflows.
 
 Simple flow:
 
-`EEG files -> feature engineering -> multi-target model -> API -> web app`
+`EEG files -> feature engineering -> multi-target model -> optional demo API/UI`
 
 ---
 
@@ -56,7 +56,7 @@ Recommended file reading order:
 6. `frontend/app/HomeClient.tsx`
 7. `frontend/next.config.ts`
 
-This order moves from core ML to deployment.
+This order moves from core ML to optional demo components.
 
 ---
 
@@ -238,7 +238,7 @@ Why this is strong:
 
 ---
 
-## 8) Report-Adapted Personal Prediction (Important Practical Innovation)
+## 8) Report-Adapted Personal Prediction (Exploratory Extension)
 
 Main file: `src/predict_my_report.py`
 
@@ -256,7 +256,7 @@ Your script handles this by:
 4. Building complete model input row.
 5. Predicting all 4 targets.
 
-This is excellent to discuss in interviews because it solves real-world sparse-input problems.
+This is useful to discuss in interviews as an exploratory extension that shows initiative around sparse-input handling, but it is not the central benchmarked path.
 
 ---
 
@@ -310,7 +310,7 @@ Responsibilities:
 3. Fill existing anchor features directly
 4. Estimate missing channels with region rules
 
-This keeps backend behavior aligned with report-adapted inference logic.
+This keeps the demo backend behavior aligned with the exploratory sparse-input logic.
 
 ---
 
@@ -320,7 +320,7 @@ Main UI file: `frontend/app/HomeClient.tsx`
 
 ### 10.1 What the Frontend Does
 
-It gives 4 workflows:
+It gives 4 lightweight demo workflows:
 
 1. Upload CSV
 2. Upload PDF (experimental)
@@ -443,7 +443,7 @@ Use root route in `main.py` and check `GET /`.
 
 Answer:
 
-NeuroScope is an end-to-end machine learning pipeline that predicts four cognitive outcomes from resting-state EEG. I extract EO and EC bandpower features from EEGLAB `.set` files, add age and gender, and train a multi-target model using `RandomForestRegressor` wrapped with `MultiOutputRegressor`. I evaluate with K-fold CV using per-target R2 and RMSE, save model artifacts, and deploy inference through FastAPI plus a Next.js frontend with CSV, manual, demo, and report-adapted workflows.
+NeuroScope is a reproducible EEG regression benchmark focused on resting-state EO/EC bandpower features. I extract channel-wise spectral features from EEGLAB `.set` files, add age and gender, and train a multi-target model using `RandomForestRegressor` wrapped with `MultiOutputRegressor`. I evaluate with K-fold CV using per-target R2 and RMSE, save artifacts and summaries for reproducibility, and include a lightweight FastAPI plus Next.js demo layer for manual, CSV, and built-in example workflows.
 
 ## Q2) Why did you choose bandpower features?
 
@@ -493,7 +493,7 @@ Targets can have different scales. Z-score standardization keeps them comparable
 
 Answer:
 
-In real reports we may only have anchor channels. Report-adapted inference expands these sparse values into a full schema-compatible input using region-based templates, enabling practical inference without full channel export.
+In real reports we may only have anchor channels. This exploratory extension expands sparse values into a full schema-compatible input using region-based templates, which is useful for experimentation even though it is not the main benchmarked workflow.
 
 ## Q9) How does your backend work internally?
 
@@ -520,35 +520,35 @@ Answer:
 
 Answer:
 
-1. Add stronger baselines and hyperparameter search.
-2. Add confidence intervals/uncertainty estimates.
-3. Implement robust PDF parser for automatic value extraction.
+1. Add stronger or richer EEG feature families before expanding model complexity too much.
+2. Add confidence intervals or uncertainty estimates.
+3. Keep the PDF path as a future extension only if report parsing becomes clearly worthwhile.
 4. Add experiment tracking and strict reproducibility metadata.
 
 ## Q13) If interviewer asks "Is this deployable?"
 
 Answer:
 
-Yes as an internal research tool. It already has a service layer and UI workflows. For production-grade deployment, I would add authentication, observability, stricter validation, model versioning, and uncertainty reporting.
+Yes as a lightweight internal demo tool. It already has a service layer and UI workflows, but I would not describe it as production-ready. For production-grade deployment, I would add authentication, observability, stricter validation, model versioning, and uncertainty reporting.
 
 ## Q14) What did you personally learn from this project?
 
 Answer:
 
-I learned how to convert a research-style EEG pipeline into a usable product: data integration, feature engineering, multi-target modeling, API design, UI workflows, and debugging real environment issues.
+I learned how to turn a research-style EEG pipeline into a reproducible benchmark with optional demo interfaces: data integration, feature engineering, multi-target modeling, API design, UI workflows, and debugging real environment issues.
 
 ## Q15) Why is this project good for ML internships?
 
 Answer:
 
-It demonstrates complete ownership of the ML lifecycle:
+It demonstrates strong ownership of the ML lifecycle:
 
 1. domain-specific data processing
 2. thoughtful feature engineering
 3. model training and evaluation
 4. reproducible artifacts
-5. backend serving
-6. frontend integration
+5. optional backend serving
+6. optional frontend integration
 
 ---
 
@@ -590,11 +590,11 @@ I build EO/EC state maps, compute frontal/central/posterior/global templates fro
 
 ### 30-second script
 
-I built NeuroScope, an EEG ML pipeline that predicts four cognitive outcomes from resting-state EO/EC bandpower plus metadata. I engineered the full data-to-model workflow, evaluated with cross-validation, and deployed inference through FastAPI and a Next.js interface.
+I built NeuroScope, a reproducible EEG regression benchmark using resting-state EO/EC bandpower plus metadata. I engineered the feature pipeline, evaluated it with cross-validation, and added lightweight FastAPI and Next.js demo layers around the saved artifacts.
 
 ### 2-minute script
 
-The pipeline starts by matching subjects with complete EO, EC, metadata, and target records. EEG `.set` files are loaded with MNE, preprocessed, and converted into channel-wise bandpower features across eight bands for both EO and EC states. I append age and gender and train a multi-target random forest model using `MultiOutputRegressor`. Evaluation is done with K-fold CV and per-target R2/RMSE. I then persist model and schema artifacts and expose them through FastAPI endpoints for manual input, CSV batch, and demo prediction. The frontend calls these endpoints through a stable `/api` proxy rewrite and displays formatted results for all targets.
+The pipeline starts by matching subjects with complete EO, EC, metadata, and target records. EEG `.set` files are loaded with MNE, preprocessed, and converted into channel-wise bandpower features across eight bands for both EO and EC states. I append age and gender and train a multi-target random forest model using `MultiOutputRegressor`. Evaluation is done with K-fold CV and per-target R2/RMSE. I then persist model and schema artifacts, and I also include a lightweight FastAPI plus Next.js demo layer for manual input, CSV batch, and built-in demo prediction. In interviews, though, I position the reproducible benchmark as the main contribution and the web layer as supporting engineering breadth.
 
 ### 5-minute script
 
@@ -602,8 +602,8 @@ Expand the 2-minute script with:
 
 1. why EO/EC separation matters biologically,
 2. why tabular spectral features were chosen over raw deep models,
-3. report-adapted sparse-input reconstruction logic,
-4. practical deployment/debug lessons.
+3. exploratory sparse-input reconstruction logic,
+4. practical demo/deployment debugging lessons.
 
 ---
 
@@ -620,7 +620,7 @@ Expand the 2-minute script with:
    - processed/target_scaler.json
 7. Backend framework: FastAPI.
 8. Frontend framework: Next.js + React + TypeScript.
-9. Key practical innovation: report-adapted inference from anchor channels.
+9. Useful exploratory extension: report-adapted inference from anchor channels.
 10. Limitation statement: exploratory, not clinical.
 
 ---
@@ -632,6 +632,6 @@ For interviews, do not just describe tools. Explain decisions:
 1. Why this feature engineering?
 2. Why this model?
 3. What trade-offs did you accept?
-4. How did you make it usable end-to-end?
+4. How did you add a usable demo layer around the benchmark?
 
 If you can explain these clearly, this project becomes a very strong ML internship and research profile.

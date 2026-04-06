@@ -1,4 +1,4 @@
-# 3. src/split_manifest.py
+"""Create, validate, and summarize subject-level benchmark split manifests."""
 
 from __future__ import annotations
 

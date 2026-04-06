@@ -396,14 +396,14 @@ export default function HomePage() {
     <main className="page-shell">
       <section className="card hero-card">
         <p className="eyebrow">NeuroScope</p>
-        <h1>NeuroScope: EEG-Based Cognitive Prediction from Resting-State Signals</h1>
+        <h1>NeuroScope Demo UI for Saved EEG Benchmark Artifacts</h1>
         <p className="subtitle">
-          Upload EEG-derived values or try a built-in example to estimate cognitive
-          target scores with your trained backend model.
+          Lightweight demo interface for trying manual, CSV, and built-in example
+          prediction workflows on top of the trained backend artifacts.
         </p>
         <p className="disclaimer">
-          Disclaimer: These predictions are exploratory research outputs and are not
-          clinically validated or intended for diagnosis.
+          Disclaimer: This UI is an interview-secondary demo layer. Outputs are
+          exploratory and are not clinically validated or intended for diagnosis.
         </p>
       </section>
 
@@ -414,7 +414,7 @@ export default function HomePage() {
             <span className="badge">Recommended</span>
           </div>
           <p className="section-note">
-            Best for batch predictions when you already have EEG anchor features in tabular format.
+            Best for demonstrating the batch prediction path when you already have anchor EEG features in tabular format.
           </p>
           <form onSubmit={handleCsvSubmit} className="stack-gap">
             <input
@@ -436,7 +436,7 @@ export default function HomePage() {
             <span className="badge soft">Experimental</span>
           </div>
           <p className="section-note">
-            PDF-based approximation is experimental and currently returns a structured placeholder response.
+            Exploratory extension for future report parsing. The current implementation returns a structured placeholder response rather than a model prediction.
           </p>
           <form onSubmit={handlePdfSubmit} className="stack-gap">
             <input
@@ -447,7 +447,7 @@ export default function HomePage() {
               }}
             />
             <button type="submit" disabled={activeWorkflow !== null} className="btn btn-secondary">
-              {activeWorkflow === "pdf" ? "Uploading PDF..." : "Try PDF Workflow"}
+              {activeWorkflow === "pdf" ? "Uploading PDF..." : "Try PDF Extension"}
             </button>
           </form>
         </article>
@@ -457,7 +457,7 @@ export default function HomePage() {
             <h2>Try Demo Example</h2>
           </div>
           <p className="section-note">
-            Instantly test the model using built-in demo EEG values from the backend.
+            Quick way to show the API and UI path using built-in anchor EEG values from the backend.
           </p>
           <button
             type="button"
@@ -471,9 +471,9 @@ export default function HomePage() {
       </section>
 
       <details className="card advanced-card">
-        <summary>Advanced: Manual Entry (EO + EC)</summary>
+        <summary>Advanced: Manual Entry Demo (EO + EC)</summary>
         <p className="section-note advanced-note">
-          Use this only when you want full control over all anchor values. Inputs are grouped by condition and electrode.
+          Interview-secondary workflow for full control over anchor values. Inputs are grouped by condition and electrode.
         </p>
         <form onSubmit={handleManualSubmit} className="stack-gap large-gap">
           <div className="manual-meta-grid">
@@ -574,7 +574,7 @@ export default function HomePage() {
 
         {!activeWorkflow && !error && !result && (
           <p className="empty-state">
-            No prediction yet. Start with the recommended CSV workflow or run the demo.
+            No prediction yet. Start with the recommended CSV demo workflow or run the built-in demo.
           </p>
         )}
 

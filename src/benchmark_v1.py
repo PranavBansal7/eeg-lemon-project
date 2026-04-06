@@ -1,4 +1,9 @@
-# 1. src/benchmark_v1.py
+"""Run reproducible EEG regression benchmarks over subject-level feature variants.
+
+Design philosophy: keep the default run small, reproducible, and easy to explain
+in interviews, while preserving broader model and feature ablations as opt-in
+extensions.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +11,7 @@ import argparse
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -18,26 +23,48 @@ from sklearn.multioutput import MultiOutputRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from feature_variants import FEATURE_VARIANTS, build_feature_variant
-from split_manifest import (
-    fold_counts,
-    generate_split_manifest,
-    load_split_manifest,
-    save_split_manifest,
-    validate_split_manifest,
-)
-from src.train_lemon_multitarget import (
-    ATTENTION_TARGET_COLUMN,
-    EXECUTIVE_FUNCTION_TARGET_COLUMN,
-    INTELLIGENCE_TARGET_COLUMN,
-    PROJECT_ROOT,
-    TARGET_ALIASES,
-    WORKING_MEMORY_TARGET_COLUMN,
-    build_dataset,
-    find_subject_file_pairs,
-    load_metadata_and_targets,
-    warn,
-)
+try:
+    from src.feature_variants import ALL_FEATURE_VARIANTS, FEATURE_VARIANTS, build_feature_variant
+    from src.split_manifest import (
+        fold_counts,
+        generate_split_manifest,
+        load_split_manifest,
+        save_split_manifest,
+        validate_split_manifest,
+    )
+    from src.train_lemon_multitarget import (
+        ATTENTION_TARGET_COLUMN,
+        EXECUTIVE_FUNCTION_TARGET_COLUMN,
+        INTELLIGENCE_TARGET_COLUMN,
+        PROJECT_ROOT,
+        TARGET_ALIASES,
+        WORKING_MEMORY_TARGET_COLUMN,
+        build_dataset,
+        find_subject_file_pairs,
+        load_metadata_and_targets,
+        warn,
+    )
+except ImportError:
+    from feature_variants import ALL_FEATURE_VARIANTS, FEATURE_VARIANTS, build_feature_variant
+    from split_manifest import (
+        fold_counts,
+        generate_split_manifest,
+        load_split_manifest,
+        save_split_manifest,
+        validate_split_manifest,
+    )
+    from train_lemon_multitarget import (
+        ATTENTION_TARGET_COLUMN,
+        EXECUTIVE_FUNCTION_TARGET_COLUMN,
+        INTELLIGENCE_TARGET_COLUMN,
+        PROJECT_ROOT,
+        TARGET_ALIASES,
+        WORKING_MEMORY_TARGET_COLUMN,
+        build_dataset,
+        find_subject_file_pairs,
+        load_metadata_and_targets,
+        warn,
+    )
 
 DEFAULT_SPLIT_PATH = PROJECT_ROOT / "processed" / "splits" / "benchmark_v1_splits.csv"
 DEFAULT_RESULTS_ROOT = PROJECT_ROOT / "results" / "benchmark_v1"
@@ -46,6 +73,7 @@ DEFAULT_RANDOM_STATE = 42
 DEFAULT_EXPERIMENT_NAME = "benchmark_v1"
 DEFAULT_LOGRATIO_EPS = 1e-6
 ALL_MODEL_NAMES = ["dummy", "ridge", "elasticnet", "random_forest", "hist_gb"]
+DEFAULT_MODEL_NAMES = ["dummy", "ridge", "random_forest"]
 FOLD_RESULTS_COLUMNS = [
     "experiment_name",
     "run_id",
@@ -78,9 +106,12 @@ SUMMARY_RESULTS_COLUMNS = [
 ]
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Benchmark v1: fixed-fold baseline model evaluation with metadata and CSV outputs."
+        description=(
+            "Benchmark v1: fixed-fold EEG regression benchmarking with an interview-friendly "
+            "baseline suite by default and optional exploratory extensions."
+        )
     )
     parser.add_argument("--split-manifest", type=Path, default=DEFAULT_SPLIT_PATH)
     parser.add_argument("--results-root", type=Path, default=DEFAULT_RESULTS_ROOT)
@@ -92,16 +123,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--models",
         nargs="+",
-        default=list(ALL_MODEL_NAMES),
+        default=list(DEFAULT_MODEL_NAMES),
         choices=ALL_MODEL_NAMES,
-        help="One or more baseline models to run (default: all).",
+        help=(
+            "One or more models to run. Defaults to the interview-friendly baseline suite: "
+            "dummy, ridge, and random_forest. Extra models such as elasticnet and hist_gb "
+            "are optional exploratory extensions."
+        ),
     )
     parser.add_argument(
         "--feature-variants",
         nargs="+",
         default=list(FEATURE_VARIANTS),
-        choices=FEATURE_VARIANTS,
-        help="One or more feature variants to run (default: all implemented variants).",
+        choices=ALL_FEATURE_VARIANTS,
+        help=(
+            "One or more feature variants to run. Defaults to the interview-friendly public "
+            "suite: eo_ec_concat, eo_ec_concat_plus_regions, and "
+            "eo_ec_concat_plus_diff_plus_regions. Additional variants remain available as "
+            "optional exploratory extensions."
+        ),
     )
     parser.add_argument(
         "--logratio-eps",
@@ -109,7 +149,7 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_LOGRATIO_EPS,
         help=f"Epsilon used in log-ratio features log(EO+eps)-log(EC+eps) (default: {DEFAULT_LOGRATIO_EPS}).",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def expected_target_columns() -> Dict[str, str]:
@@ -385,8 +425,8 @@ def summarize_results(fold_results: pd.DataFrame) -> pd.DataFrame:
     return summary[SUMMARY_RESULTS_COLUMNS]
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv: Optional[Sequence[str]] = None) -> None:
+    args = parse_args(argv)
 
     X, y_raw, subject_ids, resolved_target_columns = build_subject_level_dataset()
     target_lock_info = enforce_target_lock(
@@ -436,6 +476,20 @@ def main() -> None:
 
     selected_models = list(dict.fromkeys(args.models))
     selected_feature_variants = list(dict.fromkeys(args.feature_variants))
+
+    if selected_models == DEFAULT_MODEL_NAMES and selected_feature_variants == FEATURE_VARIANTS:
+        print(
+            "\n[INFO] Running the interview-friendly baseline benchmark suite "
+            "(dummy, ridge, random_forest) across the public EO/EC feature variants."
+        )
+    else:
+        print(
+            "\n[INFO] Running a custom benchmark selection. Optional models and advanced "
+            "feature variants are treated as exploratory extensions on top of the baseline suite."
+        )
+
+    print(f"[INFO] Models selected: {selected_models}")
+    print(f"[INFO] Feature variants selected: {selected_feature_variants}")
 
     fold_results = evaluate_models(
         X=X,

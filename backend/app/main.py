@@ -1,3 +1,10 @@
+"""Lightweight demo API for serving saved EEG benchmark artifacts.
+
+The benchmark remains the central evaluated path in this repo. This FastAPI app is
+included as an interview-secondary demo layer for manual, CSV, and built-in demo
+prediction workflows, plus a future-facing PDF upload extension.
+"""
+
 # Run locally:
 # uvicorn app.main:app --reload
 
@@ -80,10 +87,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="EEG Cognition Prediction API",
+    title="EEG Benchmark Demo API",
     description=(
-        "FastAPI backend for predicting working memory, attention, "
-        "executive function, and intelligence from EEG anchor features."
+        "Lightweight FastAPI demo layer for serving saved EEG benchmark artifacts "
+        "through manual, CSV, and built-in demo workflows. The PDF upload route is "
+        "included as a future extension and does not yet generate model predictions."
     ),
     version="1.0.0",
     lifespan=lifespan,
@@ -147,7 +155,7 @@ async def health() -> dict[str, str]:
 @app.get("/")
 async def root() -> dict[str, str]:
     return {
-        "name": "EEG Cognition Prediction API",
+        "name": "EEG Benchmark Demo API",
         "status": "ok",
         "health": "/health",
         "docs": "/docs",
@@ -230,18 +238,20 @@ async def predict_from_pdf(file: UploadFile = File(...)) -> PdfPredictionRespons
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded PDF file is empty.")
 
-    # Placeholder for a future PDF-to-features extractor pipeline.
+    # Exploratory PDF upload extension. It currently acknowledges the file but
+    # does not extract EEG features or produce a model prediction yet.
     return PdfPredictionResponse(
         message=(
-            "PDF approximation is experimental. No EEG prediction is generated from "
-            "PDF input yet."
+            "PDF upload is included as an exploratory extension. The current "
+            "implementation acknowledges the file but does not generate an EEG "
+            "prediction yet."
         ),
         experimental=True,
         filename=filename,
         size_bytes=len(content),
         notes=(
-            "Future extension: extract anchor EEG values from report text/tables, "
-            "then reuse the same prediction pipeline as manual/CSV routes."
+            "Future extension: extract report text or tables into anchor EEG values, "
+            "then reuse the same manual/CSV prediction path."
         ),
     )
 

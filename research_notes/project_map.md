@@ -23,7 +23,7 @@ Responsible for:
 - building the base subject-level dataset
 - saving training-related outputs
 
-### `feature_variants.py`
+### `src/feature_variants.py`
 Builds derived benchmark feature variants from the base EO/EC feature table.
 Responsible for:
 - EO-only / EC-only views
@@ -33,7 +33,7 @@ Responsible for:
 - asymmetry features
 - fail-fast checks for safe pairing
 
-### `split_manifest.py`
+### `src/split_manifest.py`
 Creates and validates subject-level split manifests.
 Responsible for:
 - deterministic fold definitions
@@ -41,7 +41,7 @@ Responsible for:
 - split validation
 - fold count summaries
 
-### `benchmark_v1.py`
+### `src/benchmark_v1.py`
 Benchmark runner.
 Responsible for:
 - loading the dataset

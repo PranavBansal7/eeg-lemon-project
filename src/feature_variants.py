@@ -1,4 +1,4 @@
-# 2. src/feature_variants.py
+"""Construct interview-friendly and exploratory EEG feature variants."""
 
 from __future__ import annotations
 
@@ -7,19 +7,31 @@ from typing import Dict, List, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
+# These are the public/default variants because they form a simple, interview-friendly
+# progression: start with EO+EC as separate feature spaces, add interpretable regional
+# summaries, then add explicit EO-minus-EC contrast. That keeps the main benchmark easy
+# to explain without leaning on more niche EEG feature engineering ideas.
 FEATURE_VARIANTS = [
+    "eo_ec_concat",
+    "eo_ec_concat_plus_regions",
+    "eo_ec_concat_plus_diff_plus_regions",
+]
+
+# These variants are still supported for exploratory or research-oriented work, but they
+# are intentionally demoted out of the main story. They are useful for ablations and
+# experimentation when we want to test narrower views or more handcrafted heuristics.
+ADVANCED_FEATURE_VARIANTS = [
     "eo_only",
     "ec_only",
-    "eo_ec_concat",
     "eo_ec_diff",
     "eo_ec_logratio",
     "eo_ec_concat_plus_diff",
     "eo_ec_concat_plus_logratio",
-    "eo_ec_concat_plus_regions",
-    "eo_ec_concat_plus_diff_plus_regions",
     "eo_ec_concat_plus_diff_plus_regions_plus_ratios",
     "eo_ec_concat_plus_diff_plus_regions_plus_ratios_plus_asymmetry",
 ]
+
+ALL_FEATURE_VARIANTS = FEATURE_VARIANTS + ADVANCED_FEATURE_VARIANTS
 
 BAND_SUFFIXES = [
     "low_alpha",
@@ -277,7 +289,7 @@ def build_frontal_alpha_asymmetry_features(
 
 
 def build_feature_variant(X: pd.DataFrame, variant: str, eps: float) -> pd.DataFrame:
-    if variant not in FEATURE_VARIANTS:
+    if variant not in ALL_FEATURE_VARIANTS:
         raise ValueError(f"Unknown feature variant: {variant}")
     if eps <= 0.0:
         raise ValueError("eps must be > 0 for log-ratio stability.")
