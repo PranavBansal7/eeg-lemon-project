@@ -1,9 +1,31 @@
+# Local environments and generated files
 .venv/
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Private data, trained artifacts, and local inputs
 data/
 models/
 processed/
 my_data/
+reports/
+
+# Personal project material (kept locally, not published)
+MASTER_PROJECT_GUIDE.md
+research_notes/
+docs/
+src/predict_my_report.py
+run_resume_benchmark.py
+
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Frontend dependencies and build output
 frontend/node_modules/
 node_modules/
+frontend/.next/
+frontend/tsconfig.tsbuildinfo

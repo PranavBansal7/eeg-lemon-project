@@ -1,10 +1,10 @@
-"""Construct interview-friendly and exploratory EEG feature variants.
+"""Construct compact baseline and exploratory EEG feature variants.
 
 This module intentionally separates two stories:
 
 - `FEATURE_VARIANTS` is the small public/default set used by the main benchmark
 - `ADVANCED_FEATURE_VARIANTS` keeps broader exploratory ideas available without
-  making them the main interview narrative
+  making them the main baseline suite
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from typing import Dict, List, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
-# These are the public/default variants because they form a simple, interview-friendly
+# These are the public/default variants because they form a simple, interpretable
 # progression: start with EO+EC as separate feature spaces, add interpretable regional
 # summaries, then add explicit EO-minus-EC contrast. That keeps the main benchmark easy
 # to explain without leaning on more niche EEG feature engineering ideas.
@@ -340,7 +340,7 @@ def build_feature_variant(X: pd.DataFrame, variant: str, eps: float) -> pd.DataF
 
     out_parts: List[pd.DataFrame] = []
 
-    # The interview-friendly story is a simple progression: keep EO/EC separate,
+    # The default progression keeps EO/EC separate,
     # optionally add region summaries, then add explicit EO-minus-EC contrast.
     # Narrower ablations such as EO-only and EC-only still stay available here.
     if variant == "eo_only":

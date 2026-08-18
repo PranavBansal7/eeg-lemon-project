@@ -55,8 +55,5 @@
     "method": "zscore_train_fold_only",
     "prediction_inverse_transform": "to_raw_target_space",
     "metrics_space": "raw"
-  },
-  "notes": {
-    "report_style_prediction": "exploratory only"
   }
 }

@@ -222,7 +222,7 @@ function HeroCard(props: HeroCardProps) {
         prediction workflows on top of the saved backend artifacts.
       </p>
       <p className="disclaimer">
-        This UI is an interview-secondary demo layer. The recommended browser path
+        This UI is an optional demo layer. The recommended browser path
         uses <code>{props.apiBase}</code>, while the benchmark remains the main
         validated contribution.
       </p>
@@ -240,8 +240,7 @@ function WorkflowGrid(props: WorkflowGridProps) {
         </div>
         <p className="section-note">
           Best for demonstrating the batch prediction path when you already have
-          anchor EEG features in tabular format. A ready-to-test sample file lives
-          at <code>my_data/sample_anchor_input.csv</code>.
+          anchor EEG features in tabular format.
         </p>
         <form onSubmit={props.onCsvSubmit} className="stack-gap">
           <input
@@ -322,7 +321,7 @@ function OptionalManualEntryDemo(props: OptionalManualEntryDemoProps) {
     <details className="card advanced-card">
       <summary>Optional Manual Entry Demo (EO + EC)</summary>
       <p className="section-note advanced-note">
-        Optional interview-secondary workflow for full control over anchor values.
+        Optional workflow for full control over anchor values.
         Inputs are grouped by condition and electrode.
       </p>
       <form onSubmit={props.onSubmit} className="stack-gap large-gap">

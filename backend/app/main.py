@@ -1,7 +1,7 @@
 """Lightweight demo API for serving saved EEG benchmark artifacts.
 
 The benchmark remains the central evaluated path in this repo. This FastAPI app is
-included as an interview-secondary demo layer for manual, CSV, and built-in demo
+included as an optional demo layer for manual, CSV, and built-in demo
 prediction workflows, plus a future-facing PDF upload extension.
 """
 

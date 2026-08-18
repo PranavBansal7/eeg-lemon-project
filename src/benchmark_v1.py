@@ -1,8 +1,7 @@
 """Run reproducible EEG regression benchmarks over subject-level feature variants.
 
-Design philosophy: keep the default run small, reproducible, and easy to explain
-in interviews, while preserving broader model and feature ablations as opt-in
-extensions.
+Design philosophy: keep the default run compact, reproducible, and interpretable,
+while preserving broader model and feature ablations as opt-in extensions.
 """
 
 from __future__ import annotations
@@ -113,7 +112,7 @@ SUMMARY_RESULTS_COLUMNS = [
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Benchmark v1: fixed-fold EEG regression benchmarking with an interview-friendly "
+            "Benchmark v1: fixed-fold EEG regression benchmarking with a compact "
             "baseline suite by default and optional exploratory extensions. The default "
             "suite uses dummy, ridge, and random_forest across the three public EO/EC variants."
         )
@@ -131,7 +130,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default=list(DEFAULT_MODEL_NAMES),
         choices=ALL_MODEL_NAMES,
         help=(
-            "One or more models to run. Defaults to the interview-friendly baseline suite: "
+            "One or more models to run. Defaults to the compact baseline suite: "
             "dummy, ridge, and random_forest. Extra models such as elasticnet and hist_gb "
             "are optional exploratory extensions."
         ),
@@ -142,7 +141,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default=list(FEATURE_VARIANTS),
         choices=ALL_FEATURE_VARIANTS,
         help=(
-            "One or more feature variants to run. Defaults to the interview-friendly public "
+            "One or more feature variants to run. Defaults to the public "
             "suite: eo_ec_concat, eo_ec_concat_plus_regions, and "
             "eo_ec_concat_plus_diff_plus_regions. Additional variants remain available as "
             "optional exploratory extensions."
@@ -513,7 +512,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
     if selected_models == DEFAULT_MODEL_NAMES and selected_feature_variants == FEATURE_VARIANTS:
         print(
-            "\n[INFO] Running the interview-friendly default suite: "
+            "\n[INFO] Running the compact default suite: "
             f"{DEFAULT_SUITE_EXPLANATION}."
         )
     else:
@@ -568,7 +567,6 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             "prediction_inverse_transform": "to_raw_target_space",
             "metrics_space": "raw",
         },
-        "notes": {"report_style_prediction": "exploratory only"},
     }
     write_metadata(metadata_path, metadata)
 
